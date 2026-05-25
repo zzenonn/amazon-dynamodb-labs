@@ -204,4 +204,4 @@ At this point you have used every major DynamoDB read and write API:
 - `TransactWriteItems` / `TransactGetItems` for atomicity
 - `Scan` for full-table reads
 
-In the next module, you tie everything together into a REST API.
+In the next module, you clean up the resources created during this workshop.

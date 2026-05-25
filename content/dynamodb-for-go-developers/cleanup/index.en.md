@@ -1,7 +1,7 @@
 ---
-title: "13. Cleanup"
+title: "12. Cleanup"
 date: 2021-04-21T07:33:04-05:00
-weight: 130
+weight: 120
 chapter: true
 description: "Delete the DynamoDB table and clean up resources."
 ---

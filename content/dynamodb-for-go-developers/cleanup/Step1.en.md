@@ -71,7 +71,7 @@ In this workshop you used every major DynamoDB API with the AWS SDK for Go v2:
 | `TransactWriteItems` | Atomic multi-item writes | 10 |
 | `TransactGetItems` | Atomic multi-item reads | 10 |
 | `Scan` | Read the entire table | 11 |
-| `DeleteTable` | Delete the table | 13 |
+| `DeleteTable` | Delete the table | 12 |
 
 ### Key design concepts applied
 

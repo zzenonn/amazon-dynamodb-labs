@@ -4,7 +4,42 @@ date: 2021-04-21T07:33:04-05:00
 weight: 30
 ---
 
-In this step, you create the Go project and install the AWS SDK dependencies you need for the rest of the workshop.
+In this step, you install Go, create the Go project, and install the AWS SDK dependencies you need for the rest of the workshop.
+
+## Install Go
+
+Download and install Go 1.26.3 (or the latest version from [go.dev/dl](https://go.dev/dl/)):
+
+```bash
+rm -rf /usr/local/go && tar -C /usr/local -xzf go1.26.3.linux-amd64.tar.gz
+```
+
+You may need to run the command with `sudo`. Do not extract the archive into an existing `/usr/local/go` tree — this is known to produce broken Go installations.
+
+Add `/usr/local/go/bin` to your `PATH` by appending the following line to `$HOME/.profile` (or `/etc/profile` for a system-wide installation):
+
+```bash
+export PATH=$PATH:/usr/local/go/bin
+```
+
+Apply the change immediately:
+
+```bash
+source $HOME/.profile
+```
+
+Verify the installation:
+
+```bash
+go version
+```
+
+Expected output (version may vary):
+```text
+go version go1.26.3 linux/amd64
+```
+
+::alert[If you are running on macOS or Windows, download the appropriate installer from [go.dev/dl](https://go.dev/dl/) and follow the platform-specific instructions.]{type="info"}
 
 ## Initialize the project
 

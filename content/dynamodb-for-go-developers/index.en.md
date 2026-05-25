@@ -13,7 +13,7 @@ Here's what this workshop includes:
 
 ### Target audience
 
-This workshop is designed for Go developers who want to learn DynamoDB from the ground up by building a real application. You will write Go code that creates tables, writes data, queries with indexes, performs transactions, and serves a REST API.
+This workshop is designed for Go developers who want to learn DynamoDB from the ground up by building a real application. You will write Go code that creates tables, writes data, queries with indexes, and performs transactions — running each operation directly from `go run .`.
 
 ### Requirements
 
@@ -37,7 +37,6 @@ A complete inventory management system featuring:
 - **Orders** with status tracking and lifecycle management
 - **Order Items** with pricing and quantities
 - **Single table design** with multiple access patterns
-- **REST API** backed by DynamoDB
 
 ### What you'll learn
 
@@ -50,4 +49,3 @@ A complete inventory management system featuring:
 - Deleting items with safeguards
 - Atomic operations with `TransactWriteItems` and `TransactGetItems`
 - Scanning tables with pagination and parallel segments
-- Building a REST API that exercises all access patterns
