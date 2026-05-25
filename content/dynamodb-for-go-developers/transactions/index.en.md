@@ -1,7 +1,7 @@
 ---
-title: "10. Transactions"
+title: "7. Transactions"
 date: 2021-04-21T07:33:04-05:00
-weight: 100
+weight: 70
 chapter: true
 description: "Perform atomic multi-item operations with TransactWriteItems and TransactGetItems."
 ---

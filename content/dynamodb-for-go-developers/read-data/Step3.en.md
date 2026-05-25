@@ -1,7 +1,7 @@
 ---
 title: "Scan and parallel scan"
 date: 2021-04-21T07:33:04-05:00
-weight: 10
+weight: 30
 ---
 
 The `Scan` operation reads every item in the table (or index). Unlike `Query`, which targets a specific partition, `Scan` examines every item and returns those that match an optional filter expression.
@@ -194,14 +194,4 @@ Total items found: 17
 
 Both approaches return the same total count, but parallel scan completes faster on large tables because segments are processed concurrently.
 
-### Review
-
-At this point you have used every major DynamoDB read and write API:
-- `PutItem` / `BatchWriteItem` for writes
-- `GetItem` / `Query` for targeted reads
-- `UpdateItem` with expressions and conditions
-- `DeleteItem` with safeguards
-- `TransactWriteItems` / `TransactGetItems` for atomicity
-- `Scan` for full-table reads
-
-In the next module, you clean up the resources created during this workshop.
+In the next module, you learn how to update items with expressions and conditions.

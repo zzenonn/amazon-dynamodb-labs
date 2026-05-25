@@ -1,7 +1,7 @@
 ---
 title: "Create the DynamoDB table"
 date: 2021-04-21T07:33:04-05:00
-weight: 10
+weight: 20
 ---
 
 In this step, you write the Go code to create the `simple-inventory` table with all its indexes.

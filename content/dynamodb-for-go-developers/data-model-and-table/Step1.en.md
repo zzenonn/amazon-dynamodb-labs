@@ -105,4 +105,4 @@ Provides an alternate sort order within a user's partition. The `status_date` at
 }
 ```
 
-In the next module, you create the DynamoDB table with all of these indexes using the Go SDK.
+In the next step, you create this table with all its indexes using the Go SDK.
