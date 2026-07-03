@@ -45,6 +45,9 @@ The following table shows every access pattern this workshop supports and which 
 | 4 | Find order by ID | GSI: `inverted-index` | `sk=#ORDER#uuid` |
 | 5 | Get pending orders | GSI: `placed-index` | `placed_id=pending` |
 | 6 | Get user orders by status/date | LSI: `status-date-index` | `pk=#USER#john AND begins_with(status_date, pending#)` |
+| 6b | Get user orders by status/date (multi-attribute keys) | GSI: `status-date-gsi` | `pk=#USER#john AND status=pending AND created_at > 2024-01-01` |
+
+Access pattern 6 appears twice: once with a Local Secondary Index using a manually concatenated `status_date` key (the classic approach), and once with a Global Secondary Index using multi-attribute keys (a newer DynamoDB feature). You implement both so you can compare them in [Module 4](/dynamodb-for-go-developers/read-data).
 
 ## Index strategy
 
@@ -58,7 +61,12 @@ Reverses the key order. This lets you look up an order by its ID when you don't 
 A sparse index. Only items with a `placed_id` attribute appear in this index. Orders have this attribute only while they are in `pending` or `confirmed` status. Once shipped or delivered, the attribute is removed and the order disappears from the index.
 
 ### Local Secondary Index: `status-date-index` (pk, status_date)
-Provides an alternate sort order within a user's partition. The `status_date` attribute is a composite string like `pending#2024-01-15`, which lets you query a user's orders by status and sort them chronologically.
+Provides an alternate sort order within a user's partition. The `status_date` attribute is a composite string like `pending#2024-01-15`, which lets you query a user's orders by status and sort them chronologically. Building this composite string by hand is the classic workaround for querying on multiple dimensions.
+
+### Global Secondary Index: `status-date-gsi` (pk, status, created_at) — multi-attribute keys
+A newer alternative that uses **multi-attribute keys** (GSIs can compose a sort key from up to four separate attributes). Instead of concatenating `status` and the date into one string, this index uses `status` and `created_at` as two independent sort key attributes. You get the same access pattern without any string manipulation, and each attribute keeps its native type. You explore this feature in detail in Module 4.
+
+::alert[The `status` and `created_at` attributes are already present on every order, so no data changes are needed to populate this index.]{type="info"}
 
 ## Entity examples
 
@@ -105,4 +113,4 @@ Provides an alternate sort order within a user's partition. The `status_date` at
 }
 ```
 
-In the next step, you create this table with all its indexes using the Go SDK.
+In the next step, you provision this table with all its indexes using CloudFormation.

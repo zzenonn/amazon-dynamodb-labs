@@ -7,25 +7,22 @@ description: "Delete the DynamoDB table and clean up resources."
 
 ::alert[If you are running this workshop in your own AWS account, complete this cleanup to avoid ongoing charges.]{type="warning"}
 
-## Delete the DynamoDB table
+## Delete the CloudFormation stack
 
-You can delete the table using the AWS CLI:
+Because you provisioned the table with CloudFormation, you delete it by deleting the stack. CloudFormation removes the table and all its indexes:
 
 ```bash
-aws dynamodb delete-table --table-name simple-inventory
+aws cloudformation delete-stack --stack-name dynamodb-for-go-developers
 ```
 
-Expected output:
-```json
-{
-    "TableDescription": {
-        "TableName": "simple-inventory",
-        "TableStatus": "DELETING"
-    }
-}
+Wait for the deletion to complete:
+
+```bash
+aws cloudformation wait stack-delete-complete --stack-name dynamodb-for-go-developers
 ```
 
-Verify deletion:
+Verify the table is gone:
+
 ```bash
 aws dynamodb describe-table --table-name simple-inventory 2>&1
 ```
@@ -35,32 +32,19 @@ Expected output (after a few seconds):
 An error occurred (ResourceNotFoundException) when calling the DescribeTable operation: Requested resource not found: Table: simple-inventory not found
 ```
 
-Alternatively, you can add a delete function to your Go code:
+Letting CloudFormation own the full lifecycle — create and delete — is exactly the control-plane discipline you want in production. Your application code never creates or destroys infrastructure.
 
-```go
-func (r *Repository) DeleteTable(ctx context.Context) error {
-	_, err := r.client.DeleteTable(ctx, &dynamodb.DeleteTableInput{
-		TableName: aws.String(r.tableName),
-	})
-	return err
-}
-```
+## If you used a workshop-provided environment
 
-## If you used CloudFormation
-
-If you launched resources via a CloudFormation stack during setup, delete the stack:
-
-```bash
-aws cloudformation delete-stack --stack-name DynamoDBID
-```
+If you launched a VS Code environment via a separate CloudFormation stack during setup, delete that stack as well through the CloudFormation console or CLI.
 
 ## What you learned
 
-In this workshop you used every major DynamoDB API with the AWS SDK for Go v2:
+You provisioned the table's infrastructure with **CloudFormation** (control plane) and used the AWS SDK for Go v2 only for **data-plane** operations:
 
-| API | What it does | Module |
-|-----|-------------|--------|
-| `CreateTable` | Create table with GSIs and LSI | 2 |
+| Operation | What it does | Module |
+|-----------|-------------|--------|
+| CloudFormation `AWS::DynamoDB::Table` | Provision table with GSIs and LSI | 2 |
 | `PutItem` | Write a single item | 3 |
 | `BatchWriteItem` | Write up to 25 items per call | 3 |
 | `GetItem` | Read a single item by key | 4 |
@@ -71,15 +55,17 @@ In this workshop you used every major DynamoDB API with the AWS SDK for Go v2:
 | `DeleteItem` | Remove an item | 6 |
 | `TransactWriteItems` | Atomic multi-item writes | 7 |
 | `TransactGetItems` | Atomic multi-item reads | 7 |
-| `DeleteTable` | Delete the table | 8 |
+| CloudFormation `delete-stack` | Tear down the table | 8 |
 
 ### Key design concepts applied
 
+- **Control plane vs. data plane** — CloudFormation owns the table; the SDK handles items
 - **Single table design** — multiple entity types in one table
 - **Composite keys with prefixes** — `#USER#`, `#ORDER#`, `#ITEM#`
 - **Inverted index GSI** — cross-partition lookups by sort key
 - **Sparse index GSI** — only active items appear in the index
 - **Local Secondary Index** — alternate sort order within a partition
+- **Multi-attribute key GSI** — compose sort keys from multiple native attributes
 - **Condition expressions** — optimistic locking and write guards
 - **Transactions** — atomic operations across multiple items
 

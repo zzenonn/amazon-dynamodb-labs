@@ -1,179 +1,136 @@
 ---
-title: "Create the DynamoDB table"
+title: "Provision the table with CloudFormation"
 date: 2021-04-21T07:33:04-05:00
 weight: 20
 ---
 
-In this step, you write the Go code to create the `simple-inventory` table with all its indexes.
+In this step, you define the `simple-inventory` table and all its indexes in a CloudFormation template and deploy it.
 
-## Understanding CreateTable
+## Control plane vs. data plane
 
-The `CreateTable` API requires you to define:
-- **AttributeDefinitions** — only the attributes used in key schemas (primary key and indexes)
-- **KeySchema** — the partition key and sort key for the table
-- **GlobalSecondaryIndexes** — indexes with a different partition key than the base table
-- **LocalSecondaryIndexes** — indexes that share the base table's partition key but use a different sort key
-- **BillingMode** — how you pay for read/write capacity
+DynamoDB operations fall into two categories:
 
-DynamoDB is schemaless beyond the key attributes. You do not declare non-key attributes in the table definition — they are added dynamically when you write items.
+- **Control plane** — creating, updating, and deleting tables and indexes. These operations define your infrastructure.
+- **Data plane** — reading and writing items (`PutItem`, `Query`, `UpdateItem`, and so on). These operations use your infrastructure.
 
-## Write the CreateTable function
+In production, you manage the control plane with infrastructure-as-code (CloudFormation, CDK, or Terraform), not from application code. Your application uses the SDK only for the data plane. This separation gives you version-controlled, repeatable, reviewable infrastructure, and keeps table lifecycle decisions out of your request-handling code.
 
-Create a file named `repository.go`. This file holds all DynamoDB operations. Start with the `Repository` struct and the `CreateTable` function:
+For that reason, you provision the table with CloudFormation here. The Go code you write in later modules only reads and writes items.
 
-```go
-package main
+## The CloudFormation template
 
-import (
-	"context"
-	"fmt"
-	"time"
+Create a file named `template.yaml`:
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-)
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Description: DynamoDB single table for the DynamoDB for Go Developers workshop
 
-type Repository struct {
-	client    *dynamodb.Client
-	tableName string
-}
+Resources:
+  InventoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: simple-inventory
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: placed_id
+          AttributeType: S
+        - AttributeName: status_date
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: inverted-index
+          KeySchema:
+            - AttributeName: sk
+              KeyType: HASH
+            - AttributeName: pk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: placed-index
+          KeySchema:
+            - AttributeName: placed_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: status-date-gsi
+          KeySchema:
+            - AttributeName: pk
+              KeyType: HASH
+            - AttributeName: status
+              KeyType: RANGE
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      LocalSecondaryIndexes:
+        - IndexName: status-date-index
+          KeySchema:
+            - AttributeName: pk
+              KeyType: HASH
+            - AttributeName: status_date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
-func NewRepository(client *dynamodb.Client, tableName string) *Repository {
-	return &Repository{
-		client:    client,
-		tableName: tableName,
-	}
-}
-
-func (r *Repository) CreateTable(ctx context.Context) error {
-	input := &dynamodb.CreateTableInput{
-		TableName: aws.String(r.tableName),
-		KeySchema: []types.KeySchemaElement{
-			{AttributeName: aws.String("pk"), KeyType: types.KeyTypeHash},
-			{AttributeName: aws.String("sk"), KeyType: types.KeyTypeRange},
-		},
-		AttributeDefinitions: []types.AttributeDefinition{
-			{AttributeName: aws.String("pk"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: aws.String("sk"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: aws.String("status_date"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: aws.String("placed_id"), AttributeType: types.ScalarAttributeTypeS},
-		},
-		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
-			{
-				IndexName: aws.String("inverted-index"),
-				KeySchema: []types.KeySchemaElement{
-					{AttributeName: aws.String("sk"), KeyType: types.KeyTypeHash},
-					{AttributeName: aws.String("pk"), KeyType: types.KeyTypeRange},
-				},
-				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
-			},
-			{
-				IndexName: aws.String("placed-index"),
-				KeySchema: []types.KeySchemaElement{
-					{AttributeName: aws.String("placed_id"), KeyType: types.KeyTypeHash},
-				},
-				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
-			},
-		},
-		LocalSecondaryIndexes: []types.LocalSecondaryIndex{
-			{
-				IndexName: aws.String("status-date-index"),
-				KeySchema: []types.KeySchemaElement{
-					{AttributeName: aws.String("pk"), KeyType: types.KeyTypeHash},
-					{AttributeName: aws.String("status_date"), KeyType: types.KeyTypeRange},
-				},
-				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
-			},
-		},
-		BillingMode: types.BillingModePayPerRequest,
-	}
-
-	_, err := r.client.CreateTable(ctx, input)
-	return err
-}
+Outputs:
+  TableName:
+    Description: Name of the DynamoDB table
+    Value: !Ref InventoryTable
+  TableArn:
+    Description: ARN of the DynamoDB table
+    Value: !GetAtt InventoryTable.Arn
 ```
 
-Let's walk through the key pieces:
+## Walking through the template
 
-**KeySchema** defines the primary key. `pk` is the partition key (HASH) and `sk` is the sort key (RANGE). Together they uniquely identify every item.
+**`AttributeDefinitions`** declares only the attributes used in a key schema — the table's primary key plus every index key. You declare six here: `pk`, `sk`, `placed_id`, `status_date`, `status`, and `created_at`. Non-key attributes (`email`, `full_name`, `price`, and so on) are never declared; DynamoDB is schemaless beyond the keys.
 
-**AttributeDefinitions** declares only the four attributes used in key schemas: `pk`, `sk`, `status_date`, and `placed_id`. You don't declare `email`, `full_name`, or other non-key attributes here.
+**`KeySchema`** defines the primary key: `pk` (HASH / partition key) and `sk` (RANGE / sort key). Together they uniquely identify every item.
 
-**inverted-index GSI** swaps `sk` as the partition key and `pk` as the sort key. This enables looking up any item by its sort key value across the entire table — for example, finding an order by its ID regardless of which user placed it.
+**`inverted-index` GSI** swaps the keys — `sk` becomes the partition key and `pk` the sort key — so you can find an item by its sort key value across all partitions.
 
-**placed-index GSI** uses `placed_id` as its partition key. This is a sparse index: only items that have a `placed_id` attribute appear in it. Orders in `pending` or `confirmed` status have this attribute; shipped and delivered orders do not.
+**`placed-index` GSI** uses `placed_id` as its partition key. Because only pending and confirmed orders carry a `placed_id` attribute, this is a sparse index: only those items appear in it.
 
-**status-date-index LSI** shares the table's partition key (`pk`) but uses `status_date` as the sort key. This lets you query a specific user's orders sorted by status and date.
+**`status-date-gsi` GSI** uses **multi-attribute keys** — a newer DynamoDB feature. Its sort key is composed of two independent attributes: `status` and `created_at`. Notice the `KeySchema` lists one `HASH` entry and *two* `RANGE` entries. This is the modern alternative to the concatenated `status_date` string used by the LSI below. You use this index in Module 4.
 
-**BillingMode** is set to `PayPerRequest` (on-demand). You pay per read/write request with no capacity planning required.
+**`status-date-index` LSI** shares the base table's partition key (`pk`) and uses the concatenated `status_date` string as its sort key. LSIs must be defined at table creation time and share the table's partition key.
 
-## Update main.go
+**`BillingMode: PAY_PER_REQUEST`** is on-demand billing — you pay per request with no capacity planning.
 
-Update your `main.go` to call `CreateTable`:
+::alert[Multi-attribute keys are a GSI-only feature: a GSI sort key can be composed of up to four attributes. LSIs and the base table key schema still use a single sort key attribute.]{type="info"}
 
-```go
-package main
+## Deploy the stack
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"os"
-)
-
-import (
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-)
-
-func main() {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
-	if tableName == "" {
-		tableName = "simple-inventory"
-	}
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-	)
-	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
-	}
-
-	client := dynamodb.NewFromConfig(cfg)
-	repo := NewRepository(client, tableName)
-
-	ctx := context.Background()
-
-	fmt.Printf("Creating table '%s' in region '%s'...\n", tableName, region)
-	if err := repo.CreateTable(ctx); err != nil {
-		log.Fatalf("Failed to create table: %v", err)
-	}
-	fmt.Println("Table created successfully!")
-}
-```
-
-## Run the code
+Deploy the template with the AWS CLI:
 
 ```bash
-go run .
+aws cloudformation deploy \
+  --template-file template.yaml \
+  --stack-name dynamodb-for-go-developers
 ```
 
 Expected output:
 ```text
-Creating table 'simple-inventory' in region 'us-east-1'...
-Table created successfully!
+Waiting for changeset to be created..
+Waiting for stack create/update to complete
+Successfully created/updated stack - dynamodb-for-go-developers
 ```
 
 ## Verify the table
 
-Creating a table is asynchronous. You can check its status with the AWS CLI:
+Confirm the table is active:
 
 ```bash
 aws dynamodb describe-table --table-name simple-inventory --query "Table.TableStatus"
@@ -184,9 +141,7 @@ Expected output:
 "ACTIVE"
 ```
 
-If the status shows `CREATING`, wait a few seconds and run the command again. Once the status is `ACTIVE`, the table is ready for use.
-
-You can also verify the indexes were created:
+Confirm the indexes were created:
 
 ```bash
 aws dynamodb describe-table --table-name simple-inventory \
@@ -196,9 +151,9 @@ aws dynamodb describe-table --table-name simple-inventory \
 Expected output:
 ```json
 [
-    ["inverted-index", "placed-index"],
+    ["inverted-index", "placed-index", "status-date-gsi"],
     ["status-date-index"]
 ]
 ```
 
-Your table is ready. In the next module, you write data to it.
+Your table is ready. Because CloudFormation owns the table's lifecycle, you never create or delete it from application code. In the next module, you start writing data to it with the Go SDK.

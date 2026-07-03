@@ -13,7 +13,7 @@ Here's what this workshop includes:
 
 ### Target audience
 
-This workshop is designed for Go developers who want to learn DynamoDB from the ground up by building a real application. You will write Go code that creates tables, writes data, queries with indexes, and performs transactions — running each operation directly from `go run .`.
+This workshop is designed for Go developers who want to learn DynamoDB from the ground up by building a real application. You provision the table with CloudFormation, then write Go code that reads and writes data, queries with indexes, and performs transactions — running each operation directly from `go run .`.
 
 ### Requirements
 
@@ -40,11 +40,12 @@ A complete inventory management system featuring:
 
 ### What you'll learn
 
-- Creating and managing DynamoDB tables with the Go SDK
+- Provisioning DynamoDB tables and indexes with CloudFormation (control plane vs. data plane)
 - Writing items with `PutItem` and `BatchWriteItem`
 - Reading items with `GetItem` and `Query`
 - Querying Global Secondary Indexes (GSI) for cross-partition lookups
 - Querying Local Secondary Indexes (LSI) for alternate sort orders
+- Using multi-attribute key GSIs as a modern alternative to concatenated keys
 - Updating items with expressions and conditions
 - Deleting items with safeguards
 - Atomic operations with `TransactWriteItems` and `TransactGetItems`

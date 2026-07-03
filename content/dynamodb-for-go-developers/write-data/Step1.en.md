@@ -6,6 +6,38 @@ weight: 10
 
 The `PutItem` operation creates a new item or replaces an existing item with the same key. In this step, you write functions to create each entity type.
 
+## Create the repository
+
+All DynamoDB data-plane operations live in a `Repository` type. Create a file named `repository.go` with the struct and its constructor:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+)
+
+type Repository struct {
+	client    *dynamodb.Client
+	tableName string
+}
+
+func NewRepository(client *dynamodb.Client, tableName string) *Repository {
+	return &Repository{
+		client:    client,
+		tableName: tableName,
+	}
+}
+```
+
+Notice there is no `CreateTable` function. The table was provisioned with CloudFormation in the previous module — application code only touches the data plane.
+
 ## Create a user
 
 Add the following function to `repository.go`:

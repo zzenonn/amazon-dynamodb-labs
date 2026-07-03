@@ -223,3 +223,109 @@ All pending orders (placed-index GSI):
 Alice's pending orders (status-date-index LSI):
   Order: ord-aaa-001
 ```
+
+## Multi-attribute keys — a modern alternative to the LSI
+
+The LSI you just used relies on a manually concatenated `status_date` string (`pending#2024-01-10`). You had to build that string when writing the item, and query it with `begins_with`. This is the classic workaround for querying on more than one dimension.
+
+As of November 2025, DynamoDB Global Secondary Indexes support **multi-attribute keys**: a GSI partition key can be composed of up to four attributes, and a sort key can be composed of up to four attributes. This lets you use your natural domain attributes directly instead of concatenating them into synthetic strings.
+
+The `status-date-gsi` you defined in the CloudFormation template uses this feature. Its sort key is composed of two independent attributes — `status` and `created_at` — rather than one concatenated string:
+
+```yaml
+- IndexName: status-date-gsi
+  KeySchema:
+    - AttributeName: pk
+      KeyType: HASH
+    - AttributeName: status      # first sort key attribute
+      KeyType: RANGE
+    - AttributeName: created_at  # second sort key attribute
+      KeyType: RANGE
+```
+
+### Query the multi-attribute GSI
+
+Add this function to `repository.go`:
+
+```go
+func (r *Repository) GetUserOrdersByStatusGSI(ctx context.Context, userID string, status OrderStatus, since string) ([]*Order, error) {
+	result, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		IndexName:              aws.String("status-date-gsi"),
+		KeyConditionExpression: aws.String("pk = :pk AND #status = :status AND created_at > :since"),
+		ExpressionAttributeNames: map[string]string{
+			"#status": "status",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk":     &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", userID)},
+			":status": &types.AttributeValueMemberS{Value: string(status)},
+			":since":  &types.AttributeValueMemberS{Value: since},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var orders []*Order
+	for _, item := range result.Items {
+		var order Order
+		if err := attributevalue.UnmarshalMap(item, &order); err != nil {
+			continue
+		}
+		order.UserID = userID
+		orders = append(orders, &order)
+	}
+
+	return orders, nil
+}
+```
+
+Notice what changed compared to the LSI query:
+- No concatenated string — `status` and `created_at` are queried as separate native attributes.
+- The partition key uses an equality condition, each sort key attribute is applied left-to-right, and the range condition (`created_at > :since`) is on the last sort key attribute.
+- Because `created_at` is a distinct attribute, you could store it as a Number type for numeric sorting instead of relying on lexicographic string order.
+
+### Query rules for multi-attribute sort keys
+
+- All partition key attributes must use equality (`=`) conditions.
+- Sort key attributes are queried **left-to-right** in the order defined — you can supply the first, the first two, and so on, but you cannot skip one in the middle.
+- Range conditions (`>`, `<`, `BETWEEN`, `begins_with`) are only allowed on the **last** sort key attribute in your query.
+
+### LSI vs. multi-attribute GSI
+
+| | LSI (`status-date-index`) | Multi-attribute GSI (`status-date-gsi`) |
+|--|--|--|
+| Key composition | One concatenated `status_date` string | Separate `status` + `created_at` attributes |
+| Application code | Must build/parse the composite string | Uses natural attributes directly |
+| Consistent reads | Strongly consistent available | Eventually consistent only |
+| Created | At table creation only | Any time |
+| Native types | Everything is a string | Each attribute keeps its type |
+
+Use the LSI when you need strongly consistent reads within a partition. Reach for multi-attribute GSIs when you want cleaner code, native typing, and the flexibility to add new query dimensions without reworking your item attributes.
+
+### Test the multi-attribute GSI query
+
+Add to `main.go`:
+
+```go
+	// GSI: status-date-gsi (multi-attribute keys) — alice's pending orders since a date
+	fmt.Println("\nAlice's pending orders since 2024-01-01 (status-date-gsi multi-attribute GSI):")
+	recent, err := repo.GetUserOrdersByStatusGSI(ctx, "alice", OrderStatusPending, "2024-01-01T00:00:00Z")
+	if err != nil {
+		log.Fatalf("Failed: %v", err)
+	}
+	for _, o := range recent {
+		fmt.Printf("  Order: %s  Created: %s\n", o.ID, o.CreatedAt.Format("2006-01-02"))
+	}
+```
+
+Run:
+```bash
+go run .
+```
+
+Expected output:
+```text
+Alice's pending orders since 2024-01-01 (status-date-gsi multi-attribute GSI):
+  Order: ord-aaa-001  Created: 2024-01-10
+```
