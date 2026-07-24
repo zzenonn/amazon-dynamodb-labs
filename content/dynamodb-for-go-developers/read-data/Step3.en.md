@@ -14,7 +14,7 @@ Scan is appropriate for:
 - **Small tables** - when the table has few items
 - **Administrative tools** - export, backup, or reporting
 
-Scan is **not** appropriate for normal application queries. It reads every item in the table, consuming capacity proportional to the entire table size, even if a filter discards most items.
+Scan is **not** appropriate for normal application queries. It reads every item in the table, consuming capacity proportional to the entire table size, even if a filter discards most items. When you need a recurring query for items with a known attribute value - for example "all pending orders" - a **sparse index** is the right tool, not a filtered scan. You already built one: the sparse `placed-index` GSI, which `GetPendingOrders` queried in the previous step reads only the pending/confirmed orders directly, instead of scanning the whole table and discarding the rest.
 
 Reference documentation for the exercises in this step:
 
