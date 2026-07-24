@@ -4,7 +4,7 @@ date: 2021-04-21T07:33:04-05:00
 weight: 20
 ---
 
-Condition expressions let you specify requirements that must be true for an update to succeed. If the condition evaluates to false, DynamoDB rejects the write and returns a `ConditionalCheckFailedException`. This provides optimistic locking without external coordination.
+Condition expressions let you specify requirements that must be true for a write to succeed. If the condition evaluates to false, DynamoDB rejects the write and returns a `ConditionalCheckFailedException`. This provides optimistic locking without external coordination.
 
 ## Why conditions matter
 
@@ -13,10 +13,19 @@ Without conditions, any write blindly overwrites the current state. Conditions p
 - Creating a user that already exists
 - Updating a record that another process has already modified
 
-## Conditional update: only ship pending orders
+## Your turn: conditional update - only ship confirmed orders
 
-Add this function to `repository.go`:
+Find the `ShipOrder` stub in `repository.go` and implement it, following the `TODO(lab)` comment. The function should:
 
+1. Look up the order with `r.GetOrderByID(ctx, orderID)` for its `UserID`.
+2. `UpdateItem` with:
+   - `UpdateExpression`: `"SET #status = :new_status, #status_date = :status_date REMOVE #placed_id"`
+   - `ConditionExpression`: `"#status = :expected_status"` with `:expected_status = "confirmed"`
+3. Alias `status`, `status_date`, and `placed_id` via `ExpressionAttributeNames`.
+
+The `ConditionExpression` ensures the order's current status is `confirmed`. If someone already cancelled or shipped the order, the condition fails and the update is rejected.
+
+::::expand{header="Expand this to see the solution for ShipOrder"}
 ```go
 func (r *Repository) ShipOrder(ctx context.Context, orderID string) error {
 	order, err := r.GetOrderByID(ctx, orderID)
@@ -48,37 +57,32 @@ func (r *Repository) ShipOrder(ctx context.Context, orderID string) error {
 	return err
 }
 ```
+::::
 
-The `ConditionExpression` ensures the order's current status is `confirmed`. If someone already cancelled or shipped the order, the condition fails and the update is rejected.
+## Your turn: conditional create - prevent duplicate users
 
-## Conditional create: prevent duplicate users
+Conditions work with `PutItem` too. Find the `CreateUserIfNotExists` stub and implement it, following the `TODO(lab)` comment. It is like the `CreateUser` worked example, but adds `ConditionExpression: aws.String("attribute_not_exists(pk)")` to the `PutItemInput`. If a user with that username already has a profile, the write fails instead of silently overwriting it.
 
-You can also use conditions with `PutItem` to prevent overwriting existing items:
-
+::::expand{header="Expand this to see the solution for CreateUserIfNotExists"}
 ```go
 func (r *Repository) CreateUserIfNotExists(ctx context.Context, user User) error {
-	userMap, err := attributevalue.MarshalMap(user)
+	item, err := marshalUser(user)
 	if err != nil {
 		return err
 	}
-
-	userMap["pk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", user.Username)}
-	userMap["sk"] = &types.AttributeValueMemberS{Value: "PROFILE"}
-
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:           aws.String(r.tableName),
-		Item:                userMap,
+		Item:                item,
 		ConditionExpression: aws.String("attribute_not_exists(pk)"),
 	})
 	return err
 }
 ```
-
-The `attribute_not_exists(pk)` condition ensures the item does not already exist. If a user with that username already has a profile, the write fails instead of silently overwriting it.
+::::
 
 ## Handling ConditionalCheckFailedException
 
-In Go, you check for this error using the SDK's error types:
+In Go, you detect a failed condition with the SDK's typed error and `errors.As`:
 
 ```go
 import "errors"
@@ -92,76 +96,26 @@ if errors.As(err, &condErr) {
 }
 ```
 
-## Test conditional updates
+The demo harness already uses this pattern when calling `ShipOrder` and `CreateUserIfNotExists`, so you can see both the success and rejection paths.
 
-Update `main.go`:
+::alert[Each stub's `// TODO(lab):` comment describes exactly what to do. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
 
-```go
-func main() {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
-	if tableName == "" {
-		tableName = "simple-inventory"
-	}
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-	)
-	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
-	}
-
-	client := dynamodb.NewFromConfig(cfg)
-	repo := NewRepository(client, tableName)
-	ctx := context.Background()
-
-	// Try to ship a confirmed order (should succeed)
-	fmt.Println("Shipping ord-aaa-002 (currently confirmed)...")
-	err = repo.ShipOrder(ctx, "ord-aaa-002")
-	if err != nil {
-		var condErr *types.ConditionalCheckFailedException
-		if errors.As(err, &condErr) {
-			fmt.Println("  REJECTED: order is not in 'confirmed' status")
-		} else {
-			log.Fatalf("Unexpected error: %v", err)
-		}
-	} else {
-		fmt.Println("  SUCCESS: order shipped")
-	}
-
-	// Try to ship a pending order (should fail — must be confirmed first)
-	fmt.Println("\nShipping ord-bbb-001 (currently pending)...")
-	err = repo.ShipOrder(ctx, "ord-bbb-001")
-	if err != nil {
-		var condErr *types.ConditionalCheckFailedException
-		if errors.As(err, &condErr) {
-			fmt.Println("  REJECTED: order is not in 'confirmed' status")
-		} else {
-			log.Fatalf("Unexpected error: %v", err)
-		}
-	} else {
-		fmt.Println("  SUCCESS: order shipped")
-	}
-}
-```
-
-You need to add `"errors"` to your imports. Run:
+## Check your work
 
 ```bash
-go run .
+go run . demo
 ```
 
-Expected output:
+Expected fragment:
 ```text
-Shipping ord-aaa-002 (currently confirmed)...
-  SUCCESS: order shipped
+== PutItem (conditional): create a user only if absent ==
+  created user 'dave'
+...
+== UpdateItem (conditional): ship a confirmed order ==
+  ord-aaa-002 shipped (was confirmed)
 
-Shipping ord-bbb-001 (currently pending)...
-  REJECTED: order is not in 'confirmed' status
+== UpdateItem (conditional): try to ship a pending order (expect rejection) ==
+  REJECTED as expected: order is not 'confirmed'
 ```
 
-The condition expression enforced the business rule: orders must be confirmed before they can be shipped. The second update was rejected because `ord-bbb-001` was still in `pending` status.
+The condition expression enforced the business rule: orders must be confirmed before they can be shipped. The attempt to ship a pending order was rejected because its status was not `confirmed`.

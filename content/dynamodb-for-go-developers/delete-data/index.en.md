@@ -7,10 +7,15 @@ description: "Delete items with conditions and handle related data cleanup."
 
 The `DeleteItem` operation removes a single item from the table by its primary key. DynamoDB does not have foreign keys or cascade deletes, so cleaning up related items is your responsibility.
 
-## Delete a single item
+## Your turn: delete a single item
 
-Add this function to `repository.go`:
+Find the `DeleteOrderItem` stub in `repository.go` and implement it, following the `TODO(lab)` comment. Call `DeleteItem` with the key:
+- `pk` = `#ORDER#<orderID>`
+- `sk` = `#ITEM#<itemID>`
 
+`DeleteItem` is idempotent - deleting an item that doesn't exist does not produce an error.
+
+::::expand{header="Expand this to see the solution for DeleteOrderItem"}
 ```go
 func (r *Repository) DeleteOrderItem(ctx context.Context, orderID, itemID string) error {
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
@@ -23,13 +28,18 @@ func (r *Repository) DeleteOrderItem(ctx context.Context, orderID, itemID string
 	return err
 }
 ```
+::::
 
-`DeleteItem` is idempotent — deleting an item that doesn't exist does not produce an error.
+## Your turn: conditional delete
 
-## Conditional delete
+You can protect deletes with conditions. Find the `CancelOrder` stub and implement it, following the `TODO(lab)` comment: look up the order for its `UserID`, then `DeleteItem` the order (`pk = #USER#<UserID>`, `sk = #ORDER#<orderID>`) with:
+- `ConditionExpression`: `"#status = :expected"` with `:expected = string(OrderStatusPending)`
+- `ExpressionAttributeNames`: `{"#status": "status"}`
+- `ReturnValues`: `types.ReturnValueAllOld`
 
-You can protect deletes with conditions. For example, only allow cancelling an order that is still pending:
+This only allows cancelling an order that is still pending. `ReturnValues: AllOld` returns the attributes of the item as it was before deletion - useful for logging or confirmation.
 
+::::expand{header="Expand this to see the solution for CancelOrder"}
 ```go
 func (r *Repository) CancelOrder(ctx context.Context, orderID string) error {
 	order, err := r.GetOrderByID(ctx, orderID)
@@ -55,16 +65,20 @@ func (r *Repository) CancelOrder(ctx context.Context, orderID string) error {
 	return err
 }
 ```
+::::
 
-`ReturnValues: AllOld` returns the attributes of the item as it was before deletion. This is useful for logging or confirmation purposes.
+## Your turn: delete an order and its items (cascade)
 
-## Delete an order and its items
+Because DynamoDB has no cascade delete, you must explicitly query for related items and delete them. Find the `DeleteOrderWithItems` stub and implement it, following the `TODO(lab)` comment:
 
-Because DynamoDB has no cascade delete, you must explicitly query for related items and delete them. Here is a function that deletes an order and all its items:
+1. `r.GetOrderItems(ctx, orderID)` and call `r.DeleteOrderItem` for each item.
+2. `r.GetOrderByID(ctx, orderID)` to learn the `UserID`, then `DeleteItem` the order itself.
 
+This approach has a weakness: it is **not atomic**. If the process crashes between deleting items and deleting the order, you are left in an inconsistent state. In the next module, you learn how transactions solve this problem.
+
+::::expand{header="Expand this to see the solution for DeleteOrderWithItems"}
 ```go
 func (r *Repository) DeleteOrderWithItems(ctx context.Context, orderID string) error {
-	// First, delete all order items
 	items, err := r.GetOrderItems(ctx, orderID)
 	if err != nil {
 		return err
@@ -76,7 +90,6 @@ func (r *Repository) DeleteOrderWithItems(ctx context.Context, orderID string) e
 		}
 	}
 
-	// Then find and delete the order itself
 	order, err := r.GetOrderByID(ctx, orderID)
 	if err != nil {
 		return err
@@ -92,75 +105,26 @@ func (r *Repository) DeleteOrderWithItems(ctx context.Context, orderID string) e
 	return err
 }
 ```
+::::
 
-This approach has a weakness: it is not atomic. If the process crashes between deleting items and deleting the order, you are left in an inconsistent state. In the next module, you learn how transactions solve this problem.
+::alert[Each stub's `// TODO(lab):` comment describes exactly what to do. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
 
-## Test deletes
+## Check your work
 
-Update `main.go`:
-
-```go
-func main() {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
-	if tableName == "" {
-		tableName = "simple-inventory"
-	}
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-	)
-	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
-	}
-
-	client := dynamodb.NewFromConfig(cfg)
-	repo := NewRepository(client, tableName)
-	ctx := context.Background()
-
-	// Show items before delete
-	fmt.Println("Items in ord-bbb-001 before delete:")
-	items, _ := repo.GetOrderItems(ctx, "ord-bbb-001")
-	for _, item := range items {
-		fmt.Printf("  %s - %s\n", item.ItemID, item.Name)
-	}
-
-	// Delete one item
-	fmt.Println("\nDeleting item-004 from ord-bbb-001...")
-	if err := repo.DeleteOrderItem(ctx, "ord-bbb-001", "item-004"); err != nil {
-		log.Fatalf("Failed to delete: %v", err)
-	}
-	fmt.Println("Item deleted.")
-
-	// Show items after delete
-	fmt.Println("\nItems in ord-bbb-001 after delete:")
-	items, _ = repo.GetOrderItems(ctx, "ord-bbb-001")
-	for _, item := range items {
-		fmt.Printf("  %s - %s\n", item.ItemID, item.Name)
-	}
-}
-```
-
-Run:
 ```bash
-go run .
+go run . demo
 ```
 
-Expected output:
+Expected fragment:
 ```text
-Items in ord-bbb-001 before delete:
-  item-004 - Monitor
-  item-005 - USB Cable
+== DeleteItem: remove an order item ==
+  order ord-aaa-001 now has 1 item(s)
+...
+== DeleteItem (cascade): delete an order and all its items ==
+  deleted ord-ccc-001 and its items
 
-Deleting item-004 from ord-bbb-001...
-Item deleted.
-
-Items in ord-bbb-001 after delete:
-  item-005 - USB Cable
+== DeleteItem (conditional): cancel a pending order ==
+  cancelled ord-bbb-001 (was pending)
 ```
 
 In the next module, you learn how to use transactions to perform multiple operations atomically.

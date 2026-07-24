@@ -10,13 +10,19 @@ weight: 20
 
 When displaying an order to a user, you want to show the order details and all items in a consistent state. A regular `GetItem` + `Query` sequence could return results from different points in time if a write happens between the two calls.
 
-## Write the GetOrderSnapshot function
+## Your turn: implement GetOrderSnapshot
 
-Add this function to `repository.go`:
+Find the `GetOrderSnapshot` stub in `repository.go` and implement it, following the `TODO(lab)` comment:
 
+1. Call `r.GetOrderItems(ctx, orderID)` first, so you know which item keys to read.
+2. Build a `[]types.TransactGetItem` whose **first** `Get` is the order (`pk = #USER#<userID>`, `sk = #ORDER#<orderID>`), followed by one `Get` per item (`pk = #ORDER#<orderID>`, `sk = #ITEM#<ItemID>`).
+3. Call `r.client.TransactGetItems`. Responses come back in the **same order as the request**, so `result.Responses[0]` is the order and the rest are items.
+4. Unmarshal the order (stamp `UserID` and `ID`) and each item, and return them.
+
+::::expand{header="Expand this to see the solution for GetOrderSnapshot"}
 ```go
 func (r *Repository) GetOrderSnapshot(ctx context.Context, userID, orderID string) (*Order, []OrderItem, error) {
-	// First, get the item IDs (we need to know them for TransactGetItems)
+	// The item IDs must be known up front to build the Get requests.
 	orderItems, err := r.GetOrderItems(ctx, orderID)
 	if err != nil {
 		return nil, nil, err
@@ -24,7 +30,6 @@ func (r *Repository) GetOrderSnapshot(ctx context.Context, userID, orderID strin
 
 	var transactItems []types.TransactGetItem
 
-	// Get the order
 	transactItems = append(transactItems, types.TransactGetItem{
 		Get: &types.Get{
 			TableName: aws.String(r.tableName),
@@ -35,7 +40,6 @@ func (r *Repository) GetOrderSnapshot(ctx context.Context, userID, orderID strin
 		},
 	})
 
-	// Get each order item
 	for _, item := range orderItems {
 		transactItems = append(transactItems, types.TransactGetItem{
 			Get: &types.Get{
@@ -55,7 +59,6 @@ func (r *Repository) GetOrderSnapshot(ctx context.Context, userID, orderID strin
 		return nil, nil, err
 	}
 
-	// Parse the order (first response)
 	var order Order
 	if len(result.Responses) > 0 && result.Responses[0].Item != nil {
 		if err := attributevalue.UnmarshalMap(result.Responses[0].Item, &order); err != nil {
@@ -65,7 +68,6 @@ func (r *Repository) GetOrderSnapshot(ctx context.Context, userID, orderID strin
 		order.ID = orderID
 	}
 
-	// Parse the items (remaining responses)
 	var items []OrderItem
 	for _, resp := range result.Responses[1:] {
 		if resp.Item != nil {
@@ -80,8 +82,7 @@ func (r *Repository) GetOrderSnapshot(ctx context.Context, userID, orderID strin
 	return &order, items, nil
 }
 ```
-
-`TransactGetItems` returns the results in the same order as the request. The first response is the order, and the remaining responses are the items.
+::::
 
 ## When to use TransactGetItems vs Query
 
@@ -91,62 +92,24 @@ For this specific example, a single `Query` on `pk = #ORDER#<id>` would be simpl
 - Reading multiple orders from different users simultaneously
 - Any time you need a guaranteed point-in-time snapshot across partitions
 
-## Test the transactional read
+::alert[The `// TODO(lab):` comment describes exactly what to do. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
 
-Update `main.go`:
+## Check your work
 
-```go
-func main() {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
+The demo reads an order and its items back as a consistent snapshot:
 
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
-	if tableName == "" {
-		tableName = "simple-inventory"
-	}
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-	)
-	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
-	}
-
-	client := dynamodb.NewFromConfig(cfg)
-	repo := NewRepository(client, tableName)
-	ctx := context.Background()
-
-	fmt.Println("Fetching order snapshot with TransactGetItems...")
-	order, items, err := repo.GetOrderSnapshot(ctx, "alice", "ord-txn-001")
-	if err != nil {
-		log.Fatalf("Transaction read failed: %v", err)
-	}
-
-	fmt.Printf("\nOrder: %s\n", order.ID)
-	fmt.Printf("Status: %s\n", order.Status)
-	fmt.Printf("Items (%d):\n", len(items))
-	for _, item := range items {
-		fmt.Printf("  %s - $%.2f x %d\n", item.Name, item.Price, item.Quantity)
-	}
-}
-```
-
-Run:
 ```bash
-go run .
+go run . demo
 ```
 
-Expected output:
+Expected fragment:
 ```text
-Fetching order snapshot with TransactGetItems...
-
-Order: ord-txn-001
-Status: pending
-Items (2):
-  Desk Lamp - $45.99 x 1
-  Notebook - $12.99 x 3
+== TransactGetItems: consistent snapshot of an order + its items ==
+  order ord-bbb-001 (status=pending) with 2 item(s)
 ```
 
-All data was read at a consistent point in time. In the next module, you learn about scanning the entire table.
+All data was read at a consistent point in time.
+
+## You've completed every operation
+
+If the demo now runs to `Demo complete.` without a `TODO(lab)` error, you have implemented every DynamoDB operation the workshop teaches. In the next module, you clean up the resources you created.

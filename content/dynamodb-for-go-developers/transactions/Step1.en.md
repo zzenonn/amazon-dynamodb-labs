@@ -15,15 +15,23 @@ When a user places an order, you need to:
 
 Without transactions, a failure partway through would leave orphaned items or an order without items. Transactions guarantee all-or-nothing.
 
-## Write the PlaceOrder function
+## Your turn: implement PlaceOrder
 
-Add this function to `repository.go`:
+Find the `PlaceOrder` stub in `repository.go` and implement it, following the `TODO(lab)` comment. Build a `[]types.TransactWriteItem` containing three kinds of operations, then pass it to `r.client.TransactWriteItems`:
 
+1. **`ConditionCheck`** - verify the user's profile exists without modifying anything. Key `pk = #USER#<UserID>`, `sk = PROFILE`, `ConditionExpression: "attribute_exists(pk)"`. If the user doesn't exist, the entire transaction fails.
+
+2. **`Put` (the order)** - the order item map with `pk = #USER#<UserID>`, `sk = #ORDER#<ID>`, plus `order_id`, `user_id`, `status`, `status_date`, `placed_id`, `address_key`, `created_at`, and `updated_at`.
+
+3. **`Put` (each item)** - one per element of `items`, with `pk = #ORDER#<ID>`, `sk = #ITEM#<ItemID>`, plus `order_id`, `item_id`, `name`, `price` (as `N`), and `quantity` (as `N`).
+
+All operations succeed or all fail - there is no state where you have an order without items or items without an order.
+
+::::expand{header="Expand this to see the solution for PlaceOrder"}
 ```go
 func (r *Repository) PlaceOrder(ctx context.Context, order *Order, items []OrderItem) error {
 	var transactItems []types.TransactWriteItem
 
-	// Condition check: verify the user exists
 	transactItems = append(transactItems, types.TransactWriteItem{
 		ConditionCheck: &types.ConditionCheck{
 			TableName: aws.String(r.tableName),
@@ -35,7 +43,6 @@ func (r *Repository) PlaceOrder(ctx context.Context, order *Order, items []Order
 		},
 	})
 
-	// Put the order
 	statusDate := fmt.Sprintf("%s#%s", order.Status, order.CreatedAt.Format("2006-01-02"))
 	orderItem := map[string]types.AttributeValue{
 		"pk":          &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", order.UserID)},
@@ -49,15 +56,10 @@ func (r *Repository) PlaceOrder(ctx context.Context, order *Order, items []Order
 		"created_at":  &types.AttributeValueMemberS{Value: order.CreatedAt.Format(time.RFC3339)},
 		"updated_at":  &types.AttributeValueMemberS{Value: order.UpdatedAt.Format(time.RFC3339)},
 	}
-
 	transactItems = append(transactItems, types.TransactWriteItem{
-		Put: &types.Put{
-			TableName: aws.String(r.tableName),
-			Item:      orderItem,
-		},
+		Put: &types.Put{TableName: aws.String(r.tableName), Item: orderItem},
 	})
 
-	// Put each order item
 	for _, item := range items {
 		transactItems = append(transactItems, types.TransactWriteItem{
 			Put: &types.Put{
@@ -81,14 +83,7 @@ func (r *Repository) PlaceOrder(ctx context.Context, order *Order, items []Order
 	return err
 }
 ```
-
-The transaction contains three types of operations:
-
-1. **ConditionCheck** — verifies the user exists without modifying anything. If the user doesn't exist, the entire transaction fails.
-2. **Put (order)** — creates the order item with all attributes including the sparse index key.
-3. **Put (items)** — creates each order item.
-
-All operations succeed or all fail. There's no state where you have an order without items or items without an order.
+::::
 
 ## Transaction limits
 
@@ -110,101 +105,20 @@ _, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
 
 If the same token is sent within 10 minutes, DynamoDB returns success without re-executing the transaction. This protects against duplicate order placement due to retries.
 
-## Test the transaction
+::alert[The `// TODO(lab):` comment describes exactly what to do. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
 
-Update `main.go`:
+## Check your work
 
-```go
-func main() {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
+The demo places a new order for alice using your `PlaceOrder`:
 
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
-	if tableName == "" {
-		tableName = "simple-inventory"
-	}
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-	)
-	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
-	}
-
-	client := dynamodb.NewFromConfig(cfg)
-	repo := NewRepository(client, tableName)
-	ctx := context.Background()
-
-	// Place an order for alice using a transaction
-	order := &Order{
-		ID:         "ord-txn-001",
-		UserID:     "alice",
-		Status:     OrderStatusPending,
-		AddressKey: "home",
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}
-
-	items := []OrderItem{
-		{ItemID: "txn-item-001", Name: "Desk Lamp", Price: 45.99, Quantity: 1},
-		{ItemID: "txn-item-002", Name: "Notebook", Price: 12.99, Quantity: 3},
-	}
-
-	fmt.Println("Placing order with transaction (user: alice)...")
-	if err := repo.PlaceOrder(ctx, order, items); err != nil {
-		log.Fatalf("Transaction failed: %v", err)
-	}
-	fmt.Println("Transaction succeeded! Order and items created atomically.")
-
-	// Verify
-	fmt.Printf("\nOrder %s:\n", order.ID)
-	fetched, _ := repo.GetOrderByID(ctx, order.ID)
-	fmt.Printf("  Status: %s  User: %s\n", fetched.Status, fetched.UserID)
-
-	fmt.Println("\nOrder items:")
-	fetchedItems, _ := repo.GetOrderItems(ctx, order.ID)
-	for _, item := range fetchedItems {
-		fmt.Printf("  %s - $%.2f x %d\n", item.Name, item.Price, item.Quantity)
-	}
-
-	// Try placing an order for a non-existent user (should fail)
-	fmt.Println("\nPlacing order for non-existent user 'ghost'...")
-	badOrder := &Order{
-		ID:         "ord-txn-002",
-		UserID:     "ghost",
-		Status:     OrderStatusPending,
-		AddressKey: "home",
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}
-	err = repo.PlaceOrder(ctx, badOrder, items)
-	if err != nil {
-		fmt.Printf("Transaction failed as expected: %v\n", err)
-	}
-}
-```
-
-Run:
 ```bash
-go run .
+go run . demo
 ```
 
-Expected output:
+Expected fragment:
 ```text
-Placing order with transaction (user: alice)...
-Transaction succeeded! Order and items created atomically.
-
-Order ord-txn-001:
-  Status: pending  User: alice
-
-Order items:
-  Desk Lamp - $45.99 x 1
-  Notebook - $12.99 x 3
-
-Placing order for non-existent user 'ghost'...
-Transaction failed as expected: operation error DynamoDB: TransactWriteItems, ...
+== Transaction: place a new order for alice ==
+  Placed order ord-demo-txn with 1 item(s)
 ```
 
-The first transaction succeeded because `alice` exists. The second failed because the condition check for user `ghost` returned false, and no items were written.
+The transaction succeeds because alice exists. Had the condition check targeted a non-existent user, the entire transaction - including both `Put` operations - would have been rolled back with no items written.

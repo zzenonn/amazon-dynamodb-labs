@@ -5,7 +5,7 @@ description: "200 level: Hands-on with DynamoDB APIs, single table design, and i
 weight: 25
 ---
 
-In this workshop, you learn how to use [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) with the AWS SDK for Go v2. You build a complete inventory management system using single table design, working through each DynamoDB API operation step by step.
+In this workshop, you learn how to use [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) with the AWS SDK for Go v2. You start from a ready-to-run project (the workshop's **lab branch**) and complete a complete inventory management system by filling in each DynamoDB API operation, guided step by step. Worked examples show you the pattern; you implement the rest.
 
 Here's what this workshop includes:
 
@@ -13,7 +13,7 @@ Here's what this workshop includes:
 
 ### Target audience
 
-This workshop is designed for Go developers who want to learn DynamoDB from the ground up by building a real application. You provision the table with CloudFormation, then write Go code that reads and writes data, queries with indexes, and performs transactions — running each operation directly from `go run .`.
+This workshop is designed for Go developers who want to learn DynamoDB by building a real application. You clone the lab-branch project, provision the table with CloudFormation, then fill in the Go code that reads and writes data, queries with indexes, and performs transactions - running each operation directly from `go run .` as you complete it.
 
 ### Requirements
 

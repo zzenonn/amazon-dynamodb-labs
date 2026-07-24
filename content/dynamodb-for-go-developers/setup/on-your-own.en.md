@@ -12,6 +12,7 @@ chapter: true
 Before starting, ensure you have:
 
 - **Go 1.21+** installed ([download here](https://go.dev/dl/))
+- **Git** installed (to clone the workshop's lab branch)
 - **AWS CLI** installed and configured with credentials ([install guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html))
 - A terminal or IDE with Go support
 

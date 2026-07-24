@@ -12,10 +12,10 @@ Single table design is a DynamoDB modeling technique where you store multiple en
 
 DynamoDB is optimized for known access patterns. By co-locating related entities in a single table, you can:
 
-- **Retrieve related data in a single query** — get a user and all their orders without joins
-- **Reduce costs** — one table instead of multiple tables to manage
-- **Use transactions across entities** — atomic operations spanning users and orders
-- **Simplify operations** — one table to monitor, back up, and scale
+- **Retrieve related data in a single query** - get a user and all their orders without joins
+- **Reduce costs** - one table instead of multiple tables to manage
+- **Use transactions across entities** - atomic operations spanning users and orders
+- **Simplify operations** - one table to monitor, back up, and scale
 
 The trade-off is that you must plan your access patterns upfront and design your keys carefully.
 
@@ -63,7 +63,7 @@ A sparse index. Only items with a `placed_id` attribute appear in this index. Or
 ### Local Secondary Index: `status-date-index` (pk, status_date)
 Provides an alternate sort order within a user's partition. The `status_date` attribute is a composite string like `pending#2024-01-15`, which lets you query a user's orders by status and sort them chronologically. Building this composite string by hand is the classic workaround for querying on multiple dimensions.
 
-### Global Secondary Index: `status-date-gsi` (pk, status, created_at) — multi-attribute keys
+### Global Secondary Index: `status-date-gsi` (pk, status, created_at) - multi-attribute keys
 A newer alternative that uses **multi-attribute keys** (GSIs can compose a sort key from up to four separate attributes). Instead of concatenating `status` and the date into one string, this index uses `status` and `created_at` as two independent sort key attributes. You get the same access pattern without any string manipulation, and each attribute keeps its native type. You explore this feature in detail in Module 4.
 
 ::alert[The `status` and `created_at` attributes are already present on every order, so no data changes are needed to populate this index.]{type="info"}

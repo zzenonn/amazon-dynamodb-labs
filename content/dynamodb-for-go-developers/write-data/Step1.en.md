@@ -4,25 +4,13 @@ date: 2021-04-21T07:33:04-05:00
 weight: 10
 ---
 
-The `PutItem` operation creates a new item or replaces an existing item with the same key. In this step, you write functions to create each entity type.
+The `PutItem` operation creates a new item or replaces an existing item with the same key. In this step, you implement the functions that create each entity type.
 
-## Create the repository
+## The repository
 
-All DynamoDB data-plane operations live in a `Repository` type. Create a file named `repository.go` with the struct and its constructor:
+All DynamoDB data-plane operations live in a `Repository` type in `repository.go`. The struct and its constructor are already provided:
 
 ```go
-package main
-
-import (
-	"context"
-	"fmt"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-)
-
 type Repository struct {
 	client    *dynamodb.Client
 	tableName string
@@ -36,184 +24,125 @@ func NewRepository(client *dynamodb.Client, tableName string) *Repository {
 }
 ```
 
-Notice there is no `CreateTable` function. The table was provisioned with CloudFormation in the previous module — application code only touches the data plane.
+Notice there is no `CreateTable` function. The table was provisioned with CloudFormation in the previous module - application code only touches the data plane.
 
-## Create a user
+## Worked example: marshaling and creating a user
 
-Add the following function to `repository.go`:
+Two functions are already implemented for you as worked examples. Read them carefully - every write path in this workshop follows the same shape.
+
+`marshalUser` converts a `User` struct into a DynamoDB attribute map, then sets the single-table keys by hand:
+
+```go
+func marshalUser(user User) (map[string]types.AttributeValue, error) {
+	item, err := attributevalue.MarshalMap(user)
+	if err != nil {
+		return nil, err
+	}
+	item["pk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", user.Username)}
+	item["sk"] = &types.AttributeValueMemberS{Value: "PROFILE"}
+	return item, nil
+}
+```
+
+`attributevalue.MarshalMap` uses the `dynamodbav` struct tags to build the map. Because `User.Username` has the tag `dynamodbav:"-"`, it is excluded from marshaling - the username is encoded in the partition key instead of stored as a redundant attribute.
+
+`CreateUser` marshals with that helper and writes the item with `PutItem`:
 
 ```go
 func (r *Repository) CreateUser(ctx context.Context, user User) error {
-	userMap, err := attributevalue.MarshalMap(user)
+	item, err := marshalUser(user)
 	if err != nil {
 		return err
 	}
-
-	userMap["pk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", user.Username)}
-	userMap["sk"] = &types.AttributeValueMemberS{Value: "PROFILE"}
-
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(r.tableName),
-		Item:      userMap,
+		Item:      item,
 	})
 	return err
 }
 ```
 
-This function uses `attributevalue.MarshalMap` to convert the Go struct into a DynamoDB attribute map using the `dynamodbav` struct tags. Then it manually sets the `pk` and `sk` attributes based on the key design from the data model chapter.
+## Your turn: marshal and create orders
 
-Notice that `User.Username` has the tag `dynamodbav:"-"`, so it is excluded from marshaling. The username is encoded in the partition key instead of stored as a redundant attribute.
+Now implement the equivalent functions for orders. In `repository.go`, find the `marshalOrder` stub and complete it, following the `TODO(lab)` comment. Beyond `pk` and `sk`, an order carries two derived index attributes:
 
-## Create an order
+1. **`status_date`** - a composite attribute combining status and creation date (`<status>#<date>`). This is the sort key for the `status-date-index` LSI.
+2. **`placed_id`** - set **only** when the order is `pending` or `confirmed`. This is what makes the `placed-index` GSI a sparse index - only active orders appear in it.
 
-Add the order creation function:
+Then complete the `CreateOrder` stub, mirroring `CreateUser`.
 
+Try to implement these yourself first. If you get stuck, expand the solution below and copy it into `repository.go`.
+
+::::expand{header="Expand this to see the solution for marshalOrder and CreateOrder"}
 ```go
-func (r *Repository) CreateOrder(ctx context.Context, order *Order) error {
-	orderMap, err := attributevalue.MarshalMap(order)
+func marshalOrder(order Order) (map[string]types.AttributeValue, error) {
+	item, err := attributevalue.MarshalMap(order)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	item["pk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", order.UserID)}
+	item["sk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#ORDER#%s", order.ID)}
+	item["status_date"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#%s", order.Status, order.CreatedAt.Format("2006-01-02"))}
 
-	orderMap["pk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", order.UserID)}
-	orderMap["sk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#ORDER#%s", order.ID)}
-
-	statusDate := fmt.Sprintf("%s#%s", order.Status, order.CreatedAt.Format("2006-01-02"))
-	orderMap["status_date"] = &types.AttributeValueMemberS{Value: statusDate}
-
+	// placed_id is only present for active orders, which is what makes the placed-index sparse.
 	if order.Status == OrderStatusPending || order.Status == OrderStatusConfirmed {
-		orderMap["placed_id"] = &types.AttributeValueMemberS{Value: string(order.Status)}
+		item["placed_id"] = &types.AttributeValueMemberS{Value: string(order.Status)}
 	}
-
-	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(r.tableName),
-		Item:      orderMap,
-	})
-	return err
+	return item, nil
 }
-```
 
-There are two important details here:
-
-1. **`status_date`** is a composite attribute that combines the order status and creation date. This attribute is the sort key for the `status-date-index` LSI, enabling queries like "get all pending orders for this user, sorted by date."
-
-2. **`placed_id`** is only set when the order is in `pending` or `confirmed` status. This is what makes the `placed-index` GSI a sparse index — only active orders appear in it.
-
-## Create an order item
-
-Add the order item creation function:
-
-```go
-func (r *Repository) CreateOrderItem(ctx context.Context, orderID string, item *OrderItem) error {
-	itemMap, err := attributevalue.MarshalMap(item)
+func (r *Repository) CreateOrder(ctx context.Context, order *Order) error {
+	item, err := marshalOrder(*order)
 	if err != nil {
 		return err
 	}
-
-	itemMap["pk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#ORDER#%s", orderID)}
-	itemMap["sk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#ITEM#%s", item.ItemID)}
-
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(r.tableName),
-		Item:      itemMap,
+		Item:      item,
 	})
 	return err
 }
 ```
+::::
 
-Order items use the order ID as their partition key. This means all items belonging to the same order are co-located, which lets you fetch them all in a single query.
+## Your turn: marshal and create order items
 
-## Test writing data
+Complete the `marshalOrderItem` and `CreateOrderItem` stubs. Order items use the order ID as their partition key (`#ORDER#<orderID>`), so all items belonging to the same order are co-located and can be fetched in a single query.
 
-Update `main.go` to create some sample data:
-
+::::expand{header="Expand this to see the solution for marshalOrderItem and CreateOrderItem"}
 ```go
-func main() {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
-	if tableName == "" {
-		tableName = "simple-inventory"
-	}
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-	)
+func marshalOrderItem(orderID string, orderItem OrderItem) (map[string]types.AttributeValue, error) {
+	item, err := attributevalue.MarshalMap(orderItem)
 	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
+		return nil, err
 	}
+	item["pk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#ORDER#%s", orderID)}
+	item["sk"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("#ITEM#%s", orderItem.ItemID)}
+	return item, nil
+}
 
-	client := dynamodb.NewFromConfig(cfg)
-	repo := NewRepository(client, tableName)
-	ctx := context.Background()
-
-	// Create a user
-	user := User{
-		Username: "john",
-		FullName: "John Doe",
-		Email:    "john@example.com",
-		Addresses: map[string]Address{
-			"home": {Street: "123 Main St", State: "CA", Country: "USA"},
-			"work": {Street: "456 Office Blvd", State: "CA", Country: "USA"},
-		},
+func (r *Repository) CreateOrderItem(ctx context.Context, orderID string, orderItem *OrderItem) error {
+	item, err := marshalOrderItem(orderID, *orderItem)
+	if err != nil {
+		return err
 	}
-
-	fmt.Println("Creating user 'john'...")
-	if err := repo.CreateUser(ctx, user); err != nil {
-		log.Fatalf("Failed to create user: %v", err)
-	}
-	fmt.Println("User created.")
-
-	// Create an order
-	order := &Order{
-		ID:         "order-001",
-		UserID:     "john",
-		Status:     OrderStatusPending,
-		AddressKey: "home",
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}
-
-	fmt.Println("Creating order 'order-001'...")
-	if err := repo.CreateOrder(ctx, order); err != nil {
-		log.Fatalf("Failed to create order: %v", err)
-	}
-	fmt.Println("Order created.")
-
-	// Create order items
-	items := []OrderItem{
-		{ItemID: "item-001", Name: "Laptop", Description: "Gaming laptop", Price: 1299.99, Quantity: 1},
-		{ItemID: "item-002", Name: "Mouse", Description: "Wireless mouse", Price: 29.99, Quantity: 2},
-	}
-
-	for _, item := range items {
-		fmt.Printf("Creating item '%s'...\n", item.Name)
-		if err := repo.CreateOrderItem(ctx, order.ID, &item); err != nil {
-			log.Fatalf("Failed to create item: %v", err)
-		}
-	}
-	fmt.Println("All items created.")
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(r.tableName),
+		Item:      item,
+	})
+	return err
 }
 ```
+::::
 
-You need to add `"time"` to your imports in `main.go`. Run the code:
+::alert[Each stub's `// TODO(lab):` comment spells out the exact keys and attributes to set. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
+
+## Check your work
+
+You have not implemented the bulk-load path yet, so run the demo to confirm your create functions compile. The demo seeds data first (via `SeedData`, which you implement in the next step) - for now, verify the project builds:
 
 ```bash
-go run .
+go build .
 ```
 
-Expected output:
-```text
-Creating user 'john'...
-User created.
-Creating order 'order-001'...
-Order created.
-Creating item 'Laptop'...
-Creating item 'Mouse'...
-All items created.
-```
-
-You can verify the data in the DynamoDB console by navigating to **Services** → **DynamoDB** → **Tables** → **simple-inventory** → **Explore table items**.
+If it compiles cleanly, your `marshalOrder`, `marshalOrderItem`, `CreateOrder`, and `CreateOrderItem` implementations are syntactically sound. You test them against real data in the next step, once `BatchWriteItem` bulk-loads the sample dataset.

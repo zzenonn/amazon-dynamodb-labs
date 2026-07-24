@@ -1,7 +1,7 @@
 ---
-title: "4. Write Data"
+title: "3. Write Data"
 date: 2021-04-21T07:33:04-05:00
-weight: 40
+weight: 30
 chapter: true
 description: "Write items to DynamoDB with PutItem and BatchWriteItem."
 ---

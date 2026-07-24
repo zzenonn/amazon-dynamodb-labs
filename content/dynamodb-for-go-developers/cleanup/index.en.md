@@ -32,7 +32,7 @@ Expected output (after a few seconds):
 An error occurred (ResourceNotFoundException) when calling the DescribeTable operation: Requested resource not found: Table: simple-inventory not found
 ```
 
-Letting CloudFormation own the full lifecycle — create and delete — is exactly the control-plane discipline you want in production. Your application code never creates or destroys infrastructure.
+Letting CloudFormation own the full lifecycle - create and delete - is exactly the control-plane discipline you want in production. Your application code never creates or destroys infrastructure.
 
 ## If you used a workshop-provided environment
 
@@ -59,15 +59,15 @@ You provisioned the table's infrastructure with **CloudFormation** (control plan
 
 ### Key design concepts applied
 
-- **Control plane vs. data plane** — CloudFormation owns the table; the SDK handles items
-- **Single table design** — multiple entity types in one table
-- **Composite keys with prefixes** — `#USER#`, `#ORDER#`, `#ITEM#`
-- **Inverted index GSI** — cross-partition lookups by sort key
-- **Sparse index GSI** — only active items appear in the index
-- **Local Secondary Index** — alternate sort order within a partition
-- **Multi-attribute key GSI** — compose sort keys from multiple native attributes
-- **Condition expressions** — optimistic locking and write guards
-- **Transactions** — atomic operations across multiple items
+- **Control plane vs. data plane** - CloudFormation owns the table; the SDK handles items
+- **Single table design** - multiple entity types in one table
+- **Composite keys with prefixes** - `#USER#`, `#ORDER#`, `#ITEM#`
+- **Inverted index GSI** - cross-partition lookups by sort key
+- **Sparse index GSI** - only active items appear in the index
+- **Local Secondary Index** - alternate sort order within a partition
+- **Multi-attribute key GSI** - compose sort keys from multiple native attributes
+- **Condition expressions** - optimistic locking and write guards
+- **Transactions** - atomic operations across multiple items
 
 ### Next steps
 

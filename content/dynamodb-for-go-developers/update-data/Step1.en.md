@@ -17,39 +17,24 @@ Update expressions define what attributes to change. The four clauses are:
 | `ADD` | Increment numbers or add to sets | `ADD quantity :inc` |
 | `DELETE` | Remove elements from a set | `DELETE tags :old_tags` |
 
-You can combine multiple clauses in a single expression.
+You can combine clauses in a single expression, but each keyword may appear **only once** - all your `SET` assignments go in one `SET` clause.
 
-## Update a user profile
+## Your turn: update order status
 
-Add this function to `repository.go`:
+Updating an order's status is a good exercise because it touches multiple attributes and interacts with the sparse index. Find the `UpdateOrderStatus` stub in `repository.go` and implement it, following the `TODO(lab)` comment. The function should:
 
-```go
-func (r *Repository) UpdateUser(ctx context.Context, username string, fullName, email string) error {
-	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("#USER#%s", username)},
-			"sk": &types.AttributeValueMemberS{Value: "PROFILE"},
-		},
-		UpdateExpression: aws.String("SET full_name = :name, email = :email"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":name":  &types.AttributeValueMemberS{Value: fullName},
-			":email": &types.AttributeValueMemberS{Value: email},
-		},
-	})
-	return err
-}
-```
+1. **Look up the order first** with `r.GetOrderByID(ctx, orderID)` to learn its `UserID` (needed for the base-table key).
+2. **Build a `SET` clause** for `status`, `status_date` (`<newStatus>#<today>`), and `updated_at`. `status` is a reserved word, so alias every attribute name via `ExpressionAttributeNames`.
+3. **Manage the sparse index attribute:**
+   - If the new status is `pending` or `confirmed`, fold `#placed_id = :placed_id` into the **same** `SET` clause (putting the order in the sparse `placed-index`).
+   - Otherwise, append ` REMOVE #placed_id` (taking the order out of the sparse index).
+4. **Call `UpdateItem`** with the key `pk = #USER#<UserID>`, `sk = #ORDER#<orderID>`.
 
-The `SET` clause assigns new values to the `full_name` and `email` attributes. If the attributes don't exist, they are created. Other attributes on the item remain unchanged.
+You will need to add the `"time"` import to `repository.go`: `time.Now().Format("2006-01-02")` builds the `status_date` date and `time.RFC3339` formats `updated_at`.
 
-## Update order status
-
-Updating an order's status is more complex because it involves multiple attributes and interacts with the sparse index:
-
+::::expand{header="Expand this to see the solution for UpdateOrderStatus"}
 ```go
 func (r *Repository) UpdateOrderStatus(ctx context.Context, orderID string, newStatus OrderStatus) error {
-	// First, find the order to get the user ID
 	order, err := r.GetOrderByID(ctx, orderID)
 	if err != nil {
 		return err
@@ -57,7 +42,10 @@ func (r *Repository) UpdateOrderStatus(ctx context.Context, orderID string, newS
 
 	statusDate := fmt.Sprintf("%s#%s", newStatus, time.Now().Format("2006-01-02"))
 
-	updateExpr := "SET #status = :status, #status_date = :status_date, #updated_at = :updated_at"
+	// An UpdateExpression may use each keyword (SET/REMOVE) only once, so the
+	// placed_id change is folded into the same SET or REMOVE clause rather than
+	// appended as a second SET.
+	setExpr := "SET #status = :status, #status_date = :status_date, #updated_at = :updated_at"
 	exprNames := map[string]string{
 		"#status":      "status",
 		"#status_date": "status_date",
@@ -69,14 +57,17 @@ func (r *Repository) UpdateOrderStatus(ctx context.Context, orderID string, newS
 		":updated_at":  &types.AttributeValueMemberS{Value: time.Now().Format(time.RFC3339)},
 	}
 
-	// Manage the sparse index attribute
+	var updateExpr string
 	if newStatus == OrderStatusPending || newStatus == OrderStatusConfirmed {
-		updateExpr += " SET #placed_id = :placed_id"
+		// Active order: set placed_id so it appears in the sparse placed-index.
+		setExpr += ", #placed_id = :placed_id"
 		exprNames["#placed_id"] = "placed_id"
 		exprValues[":placed_id"] = &types.AttributeValueMemberS{Value: string(newStatus)}
+		updateExpr = setExpr
 	} else {
-		updateExpr += " REMOVE #placed_id"
+		// Inactive order: drop placed_id so it falls out of the sparse index.
 		exprNames["#placed_id"] = "placed_id"
+		updateExpr = setExpr + " REMOVE #placed_id"
 	}
 
 	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
@@ -92,82 +83,25 @@ func (r *Repository) UpdateOrderStatus(ctx context.Context, orderID string, newS
 	return err
 }
 ```
+::::
 
-This function does three things:
-1. **Updates the status** and `status_date` attributes
-2. **Adds `placed_id`** if the new status is `pending` or `confirmed` (putting the order in the sparse index)
-3. **Removes `placed_id`** if the new status is anything else (taking the order out of the sparse index)
+::alert[Because an `UpdateExpression` may use `SET` only once, the `placed_id` assignment must be part of the same `SET` clause - not a second one. The `TODO(lab)` comment shows how to fold it in. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
 
-Notice the use of `ExpressionAttributeNames` (the `#` prefixed names). These are required when attribute names conflict with DynamoDB reserved words — `status` is a reserved word.
+## Check your work
 
-## Test the update
+Run the demo. The core walkthrough confirms an order (active status keeps `placed_id`) and then ships it (inactive status removes `placed_id`):
 
-Update `main.go`:
-
-```go
-func main() {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
-	if tableName == "" {
-		tableName = "simple-inventory"
-	}
-
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-	)
-	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
-	}
-
-	client := dynamodb.NewFromConfig(cfg)
-	repo := NewRepository(client, tableName)
-	ctx := context.Background()
-
-	// Check pending orders before update
-	fmt.Println("Pending orders before update:")
-	pending, _ := repo.GetPendingOrders(ctx)
-	for _, o := range pending {
-		fmt.Printf("  %s (user: %s)\n", o.ID, o.UserID)
-	}
-
-	// Ship alice's first order
-	fmt.Println("\nUpdating ord-aaa-001 to 'shipped'...")
-	if err := repo.UpdateOrderStatus(ctx, "ord-aaa-001", OrderStatusShipped); err != nil {
-		log.Fatalf("Failed to update order: %v", err)
-	}
-	fmt.Println("Order updated.")
-
-	// Check pending orders after update
-	fmt.Println("\nPending orders after update:")
-	pending, _ = repo.GetPendingOrders(ctx)
-	for _, o := range pending {
-		fmt.Printf("  %s (user: %s)\n", o.ID, o.UserID)
-	}
-}
-```
-
-Run:
 ```bash
-go run .
+go run . demo
 ```
 
-Expected output:
+Expected fragment:
 ```text
-Pending orders before update:
-  ord-aaa-001 (user: alice)
-  ord-bbb-001 (user: bob)
-  ord-ccc-001 (user: carol)
+== UpdateItem: confirm an order (active status -> keeps placed_id) ==
+  ord-aaa-001  status=confirmed (now appears in confirmed placed-index)
 
-Updating ord-aaa-001 to 'shipped'...
-Order updated.
-
-Pending orders after update:
-  ord-bbb-001 (user: bob)
-  ord-ccc-001 (user: carol)
+== UpdateItem: ship an order (inactive status -> removes placed_id) ==
+  ord-aaa-001  status=shipped (dropped from sparse placed-index)
 ```
 
-Notice that `ord-aaa-001` disappeared from the pending orders query. By removing the `placed_id` attribute, the order was automatically removed from the sparse GSI.
+By removing the `placed_id` attribute when an order becomes inactive, the order is automatically removed from the sparse GSI - no separate index maintenance required.

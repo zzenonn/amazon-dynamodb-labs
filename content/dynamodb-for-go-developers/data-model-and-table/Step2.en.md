@@ -4,14 +4,14 @@ date: 2021-04-21T07:33:04-05:00
 weight: 20
 ---
 
-In this step, you define the `simple-inventory` table and all its indexes in a CloudFormation template and deploy it.
+In this step, you deploy the `simple-inventory` table and all its indexes. The CloudFormation template is already included in the project you cloned (`template.yaml`) - you review it here and then deploy it.
 
 ## Control plane vs. data plane
 
 DynamoDB operations fall into two categories:
 
-- **Control plane** — creating, updating, and deleting tables and indexes. These operations define your infrastructure.
-- **Data plane** — reading and writing items (`PutItem`, `Query`, `UpdateItem`, and so on). These operations use your infrastructure.
+- **Control plane** - creating, updating, and deleting tables and indexes. These operations define your infrastructure.
+- **Data plane** - reading and writing items (`PutItem`, `Query`, `UpdateItem`, and so on). These operations use your infrastructure.
 
 In production, you manage the control plane with infrastructure-as-code (CloudFormation, CDK, or Terraform), not from application code. Your application uses the SDK only for the data plane. This separation gives you version-controlled, repeatable, reviewable infrastructure, and keeps table lifecycle decisions out of your request-handling code.
 
@@ -19,7 +19,7 @@ For that reason, you provision the table with CloudFormation here. The Go code y
 
 ## The CloudFormation template
 
-Create a file named `template.yaml`:
+Open `template.yaml` in the project you cloned and read through it:
 
 ```yaml
 AWSTemplateFormatVersion: "2010-09-09"
@@ -95,19 +95,19 @@ Outputs:
 
 ## Walking through the template
 
-**`AttributeDefinitions`** declares only the attributes used in a key schema — the table's primary key plus every index key. You declare six here: `pk`, `sk`, `placed_id`, `status_date`, `status`, and `created_at`. Non-key attributes (`email`, `full_name`, `price`, and so on) are never declared; DynamoDB is schemaless beyond the keys.
+**`AttributeDefinitions`** declares only the attributes used in a key schema - the table's primary key plus every index key. You declare six here: `pk`, `sk`, `placed_id`, `status_date`, `status`, and `created_at`. Non-key attributes (`email`, `full_name`, `price`, and so on) are never declared; DynamoDB is schemaless beyond the keys.
 
 **`KeySchema`** defines the primary key: `pk` (HASH / partition key) and `sk` (RANGE / sort key). Together they uniquely identify every item.
 
-**`inverted-index` GSI** swaps the keys — `sk` becomes the partition key and `pk` the sort key — so you can find an item by its sort key value across all partitions.
+**`inverted-index` GSI** swaps the keys - `sk` becomes the partition key and `pk` the sort key - so you can find an item by its sort key value across all partitions.
 
 **`placed-index` GSI** uses `placed_id` as its partition key. Because only pending and confirmed orders carry a `placed_id` attribute, this is a sparse index: only those items appear in it.
 
-**`status-date-gsi` GSI** uses **multi-attribute keys** — a newer DynamoDB feature. Its sort key is composed of two independent attributes: `status` and `created_at`. Notice the `KeySchema` lists one `HASH` entry and *two* `RANGE` entries. This is the modern alternative to the concatenated `status_date` string used by the LSI below. You use this index in Module 4.
+**`status-date-gsi` GSI** uses **multi-attribute keys** - a newer DynamoDB feature. Its sort key is composed of two independent attributes: `status` and `created_at`. Notice the `KeySchema` lists one `HASH` entry and *two* `RANGE` entries. This is the modern alternative to the concatenated `status_date` string used by the LSI below. You use this index in Module 4.
 
 **`status-date-index` LSI** shares the base table's partition key (`pk`) and uses the concatenated `status_date` string as its sort key. LSIs must be defined at table creation time and share the table's partition key.
 
-**`BillingMode: PAY_PER_REQUEST`** is on-demand billing — you pay per request with no capacity planning.
+**`BillingMode: PAY_PER_REQUEST`** is on-demand billing - you pay per request with no capacity planning.
 
 ::alert[Multi-attribute keys are a GSI-only feature: a GSI sort key can be composed of up to four attributes. LSIs and the base table key schema still use a single sort key attribute.]{type="info"}
 
