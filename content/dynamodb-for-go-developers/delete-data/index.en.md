@@ -5,17 +5,12 @@ weight: 60
 description: "Delete items with conditions and handle related data cleanup."
 ---
 
-The `DeleteItem` operation removes a single item from the table by its primary key. DynamoDB does not have foreign keys or cascade deletes, so cleaning up related items is your responsibility.
+The [`DeleteItem`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html) operation ([Go SDK v2](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.DeleteItem)) removes a single item from the table by its primary key. DynamoDB does not have foreign keys or cascade deletes, so cleaning up related items is your responsibility.
 
-## Your turn: delete a single item
+## Worked example: delete a single item
 
-Find the `DeleteOrderItem` stub in `repository.go` and implement it, following the `TODO(lab)` comment. Call `DeleteItem` with the key:
-- `pk` = `#ORDER#<orderID>`
-- `sk` = `#ITEM#<itemID>`
+`DeleteOrderItem` is **provided for you** as this module's worked example - a direct delete by full primary key. Read it in `repository.go`:
 
-`DeleteItem` is idempotent - deleting an item that doesn't exist does not produce an error.
-
-::::expand{header="Expand this to see the solution for DeleteOrderItem"}
 ```go
 func (r *Repository) DeleteOrderItem(ctx context.Context, orderID, itemID string) error {
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
@@ -28,7 +23,8 @@ func (r *Repository) DeleteOrderItem(ctx context.Context, orderID, itemID string
 	return err
 }
 ```
-::::
+
+`DeleteItem` is idempotent - deleting an item that doesn't exist does not produce an error. The two functions you write next build on this shape: one adds a condition, the other cascades across related items.
 
 ## Your turn: conditional delete
 

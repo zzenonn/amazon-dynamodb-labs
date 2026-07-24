@@ -8,7 +8,7 @@ The two primary read operations on the base table are `GetItem` (single item by 
 
 ## GetItem - single item retrieval
 
-The `GetItem` operation retrieves a single item by its full primary key (partition key + sort key). It is the most efficient read operation in DynamoDB - it goes directly to the partition that holds the item.
+The [`GetItem`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_GetItem.html) operation ([Go SDK v2](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.GetItem)) retrieves a single item by its full primary key (partition key + sort key). It is the most efficient read operation in DynamoDB - it goes directly to the partition that holds the item.
 
 `GetUser` is provided as a worked example. Read it in `repository.go`:
 
@@ -24,7 +24,6 @@ func (r *Repository) GetUser(ctx context.Context, username string) (*User, error
 	if err != nil {
 		return nil, err
 	}
-
 	if result.Item == nil {
 		return nil, fmt.Errorf("user not found: %s", username)
 	}
@@ -50,7 +49,7 @@ If you only need certain attributes, set `ProjectionExpression: aws.String("full
 
 ## Query - retrieve collections
 
-The `Query` operation retrieves multiple items that share the same partition key, optionally filtering on the sort key with a key condition expression. This is how you retrieve hierarchically related data - for example, all orders belonging to a user.
+The [`Query`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html) operation ([Go SDK v2](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.Query)) retrieves multiple items that share the same partition key, optionally filtering on the sort key with a [key condition expression](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.KeyConditionExpressions.html). This is how you retrieve hierarchically related data - for example, all orders belonging to a user.
 
 `GetOrdersByUserID` is provided as a worked example:
 

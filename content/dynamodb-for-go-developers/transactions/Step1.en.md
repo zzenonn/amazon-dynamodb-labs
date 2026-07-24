@@ -4,7 +4,7 @@ date: 2021-04-21T07:33:04-05:00
 weight: 10
 ---
 
-`TransactWriteItems` performs up to 100 write operations atomically. If any operation fails (due to a condition check, a conflict, or insufficient capacity), the entire transaction is rolled back. No partial writes occur.
+[`TransactWriteItems`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html) ([Go SDK v2](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.TransactWriteItems)) performs up to 100 write operations atomically. If any operation fails (due to a condition check, a conflict, or insufficient capacity), the entire transaction is rolled back. No partial writes occur. See [managing complex workflows with transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html) for the full model.
 
 ## Use case: place an order atomically
 
@@ -15,19 +15,14 @@ When a user places an order, you need to:
 
 Without transactions, a failure partway through would leave orphaned items or an order without items. Transactions guarantee all-or-nothing.
 
-## Your turn: implement PlaceOrder
+## Worked example: place an order atomically
 
-Find the `PlaceOrder` stub in `repository.go` and implement it, following the `TODO(lab)` comment. Build a `[]types.TransactWriteItem` containing three kinds of operations, then pass it to `r.client.TransactWriteItems`:
+`PlaceOrder` is **provided for you** as this module's worked example - the `TransactWriteItems` pattern that the transactional read in the next step mirrors. Read it in `repository.go`. It builds a `[]types.TransactWriteItem` with three kinds of operations and passes them to `r.client.TransactWriteItems`:
 
-1. **`ConditionCheck`** - verify the user's profile exists without modifying anything. Key `pk = #USER#<UserID>`, `sk = PROFILE`, `ConditionExpression: "attribute_exists(pk)"`. If the user doesn't exist, the entire transaction fails.
+1. **`ConditionCheck`** - verify the user's profile exists without modifying anything (`ConditionExpression: "attribute_exists(pk)"`). If the user doesn't exist, the entire transaction fails.
+2. **`Put` (the order)** - the order item map keyed `pk = #USER#<UserID>`, `sk = #ORDER#<ID>`.
+3. **`Put` (each item)** - one per element of `items`, keyed `pk = #ORDER#<ID>`, `sk = #ITEM#<ItemID>`.
 
-2. **`Put` (the order)** - the order item map with `pk = #USER#<UserID>`, `sk = #ORDER#<ID>`, plus `order_id`, `user_id`, `status`, `status_date`, `placed_id`, `address_key`, `created_at`, and `updated_at`.
-
-3. **`Put` (each item)** - one per element of `items`, with `pk = #ORDER#<ID>`, `sk = #ITEM#<ItemID>`, plus `order_id`, `item_id`, `name`, `price` (as `N`), and `quantity` (as `N`).
-
-All operations succeed or all fail - there is no state where you have an order without items or items without an order.
-
-::::expand{header="Expand this to see the solution for PlaceOrder"}
 ```go
 func (r *Repository) PlaceOrder(ctx context.Context, order *Order, items []OrderItem) error {
 	var transactItems []types.TransactWriteItem
@@ -83,7 +78,8 @@ func (r *Repository) PlaceOrder(ctx context.Context, order *Order, items []Order
 	return err
 }
 ```
-::::
+
+All operations succeed or all fail - there is no state where you have an order without items or items without an order.
 
 ## Transaction limits
 
@@ -105,11 +101,9 @@ _, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
 
 If the same token is sent within 10 minutes, DynamoDB returns success without re-executing the transaction. This protects against duplicate order placement due to retries.
 
-::alert[The `// TODO(lab):` comment describes exactly what to do. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
-
 ## Check your work
 
-The demo places a new order for alice using your `PlaceOrder`:
+The demo places a new order for alice using `PlaceOrder`:
 
 ```bash
 go run . demo

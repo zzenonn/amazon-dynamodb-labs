@@ -4,7 +4,7 @@ date: 2021-04-21T07:33:04-05:00
 weight: 20
 ---
 
-Condition expressions let you specify requirements that must be true for a write to succeed. If the condition evaluates to false, DynamoDB rejects the write and returns a `ConditionalCheckFailedException`. This provides optimistic locking without external coordination.
+[Condition expressions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ConditionExpressions.html) let you specify requirements that must be true for a write to succeed. If the condition evaluates to false, DynamoDB rejects the write and returns a `ConditionalCheckFailedException`. This provides optimistic locking without external coordination. Conditions attach to the write operations you already know - [`UpdateItem`](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.UpdateItem) and [`PutItem`](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.PutItem).
 
 ## Why conditions matter
 

@@ -4,11 +4,11 @@ date: 2021-04-21T07:33:04-05:00
 weight: 10
 ---
 
-The `UpdateItem` operation modifies an existing item's attributes without replacing the entire item. This is more efficient than `PutItem` when you only need to change a few fields, because DynamoDB only writes the changed attributes.
+The [`UpdateItem`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html) operation ([Go SDK v2](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.UpdateItem)) modifies an existing item's attributes without replacing the entire item. This is more efficient than `PutItem` when you only need to change a few fields, because DynamoDB only writes the changed attributes.
 
 ## Update expressions
 
-Update expressions define what attributes to change. The four clauses are:
+[Update expressions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.UpdateExpressions.html) define what attributes to change. The four clauses are:
 
 | Clause | Purpose | Example |
 |--------|---------|---------|
@@ -19,20 +19,10 @@ Update expressions define what attributes to change. The four clauses are:
 
 You can combine clauses in a single expression, but each keyword may appear **only once** - all your `SET` assignments go in one `SET` clause.
 
-## Your turn: update order status
+## Worked example: update order status
 
-Updating an order's status is a good exercise because it touches multiple attributes and interacts with the sparse index. Find the `UpdateOrderStatus` stub in `repository.go` and implement it, following the `TODO(lab)` comment. The function should:
+`UpdateOrderStatus` is **provided for you** as this module's worked example - the core `UpdateItem` pattern that the conditional update in the next step builds on. Read it in `repository.go`:
 
-1. **Look up the order first** with `r.GetOrderByID(ctx, orderID)` to learn its `UserID` (needed for the base-table key).
-2. **Build a `SET` clause** for `status`, `status_date` (`<newStatus>#<today>`), and `updated_at`. `status` is a reserved word, so alias every attribute name via `ExpressionAttributeNames`.
-3. **Manage the sparse index attribute:**
-   - If the new status is `pending` or `confirmed`, fold `#placed_id = :placed_id` into the **same** `SET` clause (putting the order in the sparse `placed-index`).
-   - Otherwise, append ` REMOVE #placed_id` (taking the order out of the sparse index).
-4. **Call `UpdateItem`** with the key `pk = #USER#<UserID>`, `sk = #ORDER#<orderID>`.
-
-You will need to add the `"time"` import to `repository.go`: `time.Now().Format("2006-01-02")` builds the `status_date` date and `time.RFC3339` formats `updated_at`.
-
-::::expand{header="Expand this to see the solution for UpdateOrderStatus"}
 ```go
 func (r *Repository) UpdateOrderStatus(ctx context.Context, orderID string, newStatus OrderStatus) error {
 	order, err := r.GetOrderByID(ctx, orderID)
@@ -83,9 +73,12 @@ func (r *Repository) UpdateOrderStatus(ctx context.Context, orderID string, newS
 	return err
 }
 ```
-::::
 
-::alert[Because an `UpdateExpression` may use `SET` only once, the `placed_id` assignment must be part of the same `SET` clause - not a second one. The `TODO(lab)` comment shows how to fold it in. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
+Three things to notice, which you reuse when you write the conditional update in the next step:
+
+1. **Look up the order first** with `r.GetOrderByID(ctx, orderID)` to learn its `UserID` (needed for the base-table key).
+2. **`status` is a reserved word**, so every attribute name is aliased via [`ExpressionAttributeNames`](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) (the `#`-prefixed names).
+3. **The sparse index is managed by the update:** `pending`/`confirmed` fold `#placed_id = :placed_id` into the same `SET` clause; any other status appends ` REMOVE #placed_id`, dropping the order from the sparse `placed-index`. Because `UpdateExpression` may use `SET` only once, the `placed_id` assignment must live in that same `SET` clause, not a second one.
 
 ## Check your work
 

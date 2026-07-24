@@ -4,7 +4,7 @@ date: 2021-04-21T07:33:04-05:00
 weight: 20
 ---
 
-`TransactGetItems` reads up to 100 items atomically, returning a consistent snapshot across all items. This guarantees you see all items as they existed at the same point in time.
+[`TransactGetItems`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactGetItems.html) ([Go SDK v2](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.TransactGetItems)) reads up to 100 items atomically, returning a consistent snapshot across all items. This guarantees you see all items as they existed at the same point in time.
 
 ## Use case: fetch a complete order
 

@@ -4,7 +4,7 @@ date: 2021-04-21T07:33:04-05:00
 weight: 10
 ---
 
-The `PutItem` operation creates a new item or replaces an existing item with the same key. In this step, you implement the functions that create each entity type.
+The [`PutItem`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html) operation ([Go SDK v2](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.PutItem)) creates a new item or replaces an existing item with the same key. In this step, you implement the functions that create each entity type.
 
 ## The repository
 
