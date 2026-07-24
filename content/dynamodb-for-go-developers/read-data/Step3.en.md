@@ -16,6 +16,14 @@ Scan is appropriate for:
 
 Scan is **not** appropriate for normal application queries. It reads every item in the table, consuming capacity proportional to the entire table size, even if a filter discards most items.
 
+Reference documentation for the exercises in this step:
+
+- [Working with scans in DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html)
+- [Paginating the results](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.Pagination)
+- [Parallel scan](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.ParallelScan)
+- [Filter expressions for scan](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.FilterExpression)
+- [Go SDK v2: NewScanPaginator](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#NewScanPaginator)
+
 ## Your turn: basic scan with pagination
 
 The Go SDK provides a `ScanPaginator` that handles the pagination loop automatically.

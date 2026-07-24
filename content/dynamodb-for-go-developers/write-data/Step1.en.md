@@ -28,7 +28,7 @@ Notice there is no `CreateTable` function. The table was provisioned with CloudF
 
 ## Worked example: marshaling and creating a user
 
-Two functions are already implemented for you as worked examples. Read them carefully - every write path in this workshop follows the same shape.
+Two functions are already implemented for you as worked examples.
 
 `marshalUser` converts a `User` struct into a DynamoDB attribute map, then sets the single-table keys by hand:
 
@@ -44,7 +44,7 @@ func marshalUser(user User) (map[string]types.AttributeValue, error) {
 }
 ```
 
-`attributevalue.MarshalMap` uses the `dynamodbav` struct tags to build the map. Because `User.Username` has the tag `dynamodbav:"-"`, it is excluded from marshaling - the username is encoded in the partition key instead of stored as a redundant attribute.
+`attributevalue.MarshalMap` uses the `dynamodbav` struct tags to build the map. Because `User.Username` has the tag `dynamodbav:"-"`, it is excluded from marshaling. The username is encoded in the partition key instead of stored as a redundant attribute.
 
 `CreateUser` marshals with that helper and writes the item with `PutItem`:
 

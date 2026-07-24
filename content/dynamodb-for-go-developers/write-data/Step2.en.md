@@ -16,6 +16,11 @@ Find the `BatchWriteItems` stub in `repository.go` and complete it, following th
 
 2. **Retrying unprocessed items** - if DynamoDB cannot process all items (due to throughput limits), it returns them in `UnprocessedItems`. Retry until all items are written. In a production application, you would add exponential backoff to this retry loop.
 
+For the API shape (the `RequestItems` map, `WriteRequest` / `PutRequest`, and the `UnprocessedItems` returned in the response), see the AWS documentation:
+
+- [BatchWriteItem API reference](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html)
+- [Go SDK v2: Client.BatchWriteItem](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.BatchWriteItem)
+
 ::::expand{header="Expand this to see the solution for BatchWriteItems"}
 ```go
 func (r *Repository) BatchWriteItems(ctx context.Context, items []map[string]types.AttributeValue) error {
@@ -56,47 +61,13 @@ func (r *Repository) BatchWriteItems(ctx context.Context, items []map[string]typ
 ```
 ::::
 
-## Your turn: implement SeedData
+## SeedData is provided for you
 
-The project's demo harness (`demo.go`) already builds the sample dataset as typed model objects - three users, six orders in various states, and six order items - and exposes a `load-data` command that calls `SeedData`. You implement `SeedData`.
+The project's demo harness (`demo.go`) builds the sample dataset as typed model objects - three users, six orders in various states, and six order items - and exposes a `load-data` command that calls `SeedData`. `SeedData` itself is **already implemented** in `repository.go`, because it is plain Go plumbing rather than a DynamoDB concept: it loops over the models, marshals each one with the helpers you wrote (`marshalUser`, `marshalOrder`, `marshalOrderItem`), and hands the combined slice to your `BatchWriteItems`.
 
-Find the `SeedData` stub in `repository.go` and complete it. It should marshal every user, order, and order item with the helpers you wrote in the previous step (`marshalUser`, `marshalOrder`, `marshalOrderItem`), collect them into one slice, and hand that slice to `BatchWriteItems`.
+You do not need to change it. Once your `marshalOrder`, `marshalOrderItem`, and `BatchWriteItems` implementations are in place, `SeedData` works as-is.
 
-Because `SeedData` reuses your marshaling helpers, the sample dataset is built from the same models as `CreateUser`/`CreateOrder`/`CreateOrderItem` - no hand-written attribute maps anywhere.
-
-::::expand{header="Expand this to see the solution for SeedData"}
-```go
-func (r *Repository) SeedData(ctx context.Context, users []User, orders []Order, orderItems []OrderItem) error {
-	var items []map[string]types.AttributeValue
-
-	for _, u := range users {
-		item, err := marshalUser(u)
-		if err != nil {
-			return err
-		}
-		items = append(items, item)
-	}
-	for _, o := range orders {
-		item, err := marshalOrder(o)
-		if err != nil {
-			return err
-		}
-		items = append(items, item)
-	}
-	for _, oi := range orderItems {
-		item, err := marshalOrderItem(oi.OrderID, oi)
-		if err != nil {
-			return err
-		}
-		items = append(items, item)
-	}
-
-	return r.BatchWriteItems(ctx, items)
-}
-```
-::::
-
-::alert[Both stubs' `// TODO(lab):` comments describe the exact structure. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
+::alert[The `BatchWriteItems` stub's `// TODO(lab):` comment describes the exact structure. If you get stuck, see the full reference solution as described in :link[Set up the Go project]{href="/dynamodb-for-go-developers/setup/step1"}.]{type="info"}
 
 ## Run the bulk load
 

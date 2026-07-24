@@ -6,6 +6,15 @@ weight: 20
 
 Secondary indexes let you query data using different key patterns than the base table. In this step, you implement queries against both Global Secondary Indexes (GSIs) and the Local Secondary Index (LSI). All four functions in this step are `TODO(lab)` stubs - the key difference from a base-table query is the `IndexName` parameter, which tells DynamoDB to query an index instead of the base table.
 
+Reference documentation for the exercises in this step:
+
+- [Querying a Global Secondary Index](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Querying)
+- [Querying a Local Secondary Index](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html#LSI.Querying)
+- [Improving data access with secondary indexes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html)
+- [Multi-attribute keys for GSIs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html)
+- [Condition and key condition expressions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.KeyConditionExpressions.html)
+- [Go SDK v2: Client.Query](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.Query)
+
 ## Inverted index GSI - find order by ID
 
 The `inverted-index` GSI reverses the table's key schema: it uses `sk` as the partition key and `pk` as the sort key. This enables you to look up any item by its sort key value without knowing which partition it belongs to.

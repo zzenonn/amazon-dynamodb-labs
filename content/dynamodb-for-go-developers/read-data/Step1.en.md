@@ -120,6 +120,12 @@ When a query result exceeds 1 MB or you set a `Limit`, DynamoDB returns a `LastE
 
 Find the `GetAllOrdersPaginated` stub and implement it, following the `TODO(lab)` comment. Run the same query as `GetOrdersByUserID` inside a loop: set `Limit` to `pageSize`, accumulate results each page, and continue while `LastEvaluatedKey` is non-nil, feeding it back in as `ExclusiveStartKey`.
 
+For how DynamoDB paginates and the `LastEvaluatedKey` / `ExclusiveStartKey` contract, see the AWS documentation:
+
+- [Paginating table query results](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.Pagination.html)
+- [Working with queries in DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html)
+- [Go SDK v2: Client.Query](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client.Query)
+
 ::::expand{header="Expand this to see the solution for GetAllOrdersPaginated"}
 ```go
 func (r *Repository) GetAllOrdersPaginated(ctx context.Context, userID string, pageSize int32) ([]*Order, error) {
