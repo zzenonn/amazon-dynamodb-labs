@@ -67,13 +67,13 @@ You implement the workshop one function at a time, directly in `repository.go`.
 
 ::alert[A few functions are already implemented as **worked examples** - one per core concept (for example `CreateUser`, `GetUser`, and `GetOrdersByUserID`). Read these first; the stubs for the same concept follow their shape.]{type="info"}
 
-The full solution is on the **`main`** branch of the repository you just cloned. If you get stuck on a function, view the reference for `repository.go` from the terminal:
+The full solution is on the **`main`** branch of the repository you just cloned. If you'd rather read through the completed implementation than fill in the stubs yourself, switch to that branch from the terminal:
 
 ```bash
-git show main:repository.go
+git checkout main
 ```
 
-Try to implement each function from the `TODO(lab)` guidance first, then use the reference to check your reasoning.
+This gives you the whole solution to review. To go back to the lab branch and implement the functions yourself, run `git checkout lab`.
 
 ## Explore the project
 
